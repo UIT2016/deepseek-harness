@@ -1035,7 +1035,10 @@ export interface Config {
   maxTokens?: number
   /** Positive context capacity used when the selected model has no exact value (default 1,000,000). */
   defaultContextWindow?: number
-  /** Advisory models shown by discovery consumers; defaults to V4 Flash, V4 Pro, V4 Flash Vision Exp, and the limited-time V4.1 Flash beta. */
+  /**
+   * Advisory models shown by discovery consumers; defaults to V4 Flash, V4 Pro, V4 Flash Vision Exp,
+   * and the limited-time V4.1 Flash beta.
+   */
   models?: DeepSeekCatalogModel[]
   /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
   streamIdleTimeoutMs?: number
