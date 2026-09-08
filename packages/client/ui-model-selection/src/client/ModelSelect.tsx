@@ -1,22 +1,25 @@
 /**
  * ModelSelect: the composer's named model seat (`conversation.input.model`).
  * Two-level selection per figma 496:26454's MenuDropdown: the root menu is
- * the Model / Effort row pair (label + current value + a right chevron),
- * each drilling into its own list — the provider-grouped model list over
- * the shared directory, and the effort levels. The trigger (313:14108's
- * ToggleButton) shows both: model name + effort in the caption tone.
- * Data and submission ride the SAME per-session ModelDirectory as the
- * /model popup; exact-model reasoning metadata and the selected effort come
- * from the Host rather than a client-owned vocabulary. A rejected selection
- * announces through the shared transient Toast anchored to the composer
- * card; the in-menu strip with Retry remains the catalog-load surface.
+ * the Model / Effort row pair (label + current value + a right chevron), the
+ * model row drilling into the provider-grouped list over the shared
+ * directory. The effort row drills into a slider over the exact model's
+ * adapter-owned levels in their advertised order: the filled track and its
+ * glow scale with the selected level, so a stronger effort reads as a
+ * stronger signal. The trigger (313:14108's ToggleButton) shows both: model
+ * name + effort in the caption tone. Data and submission ride the SAME
+ * per-session ModelDirectory as the /model popup; exact-model reasoning
+ * metadata and the selected effort come from the Host rather than a
+ * client-owned vocabulary. A rejected selection announces through the shared
+ * transient Toast anchored to the composer card; the in-menu strip with Retry
+ * remains the catalog-load surface.
  */
 import {
   useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
-  type KeyboardEvent, type FocusEvent,
+  type ChangeEvent, type CSSProperties, type KeyboardEvent, type FocusEvent,
 } from 'react'
 import clsx from 'clsx'
-import type { ModelReasoningEffort, ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14,
   IconWarningOutline16, Toast,
@@ -27,13 +30,6 @@ import css from './ModelSelect.module.css'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
 type Pane = 'root' | 'model' | 'effort'
-
-/** One dynamic effort row; undefined means preserve the provider default. */
-interface EffortChoice {
-  key: string
-  effort: string | undefined
-  label: string
-}
 
 /**
  * Render the composer model seat.
@@ -51,6 +47,11 @@ export function ModelSelect(
   )
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
+  // Dragging the effort slider previews a stop locally so the thumb, the
+  // filled track and its glow follow the pointer before the Host round trip
+  // lands. The store stays the authority: the preview drops itself as soon as
+  // the committed level arrives, and a model switch re-advertises the levels.
+  const [preview, setPreview] = useState<number | null>(null)
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -60,7 +61,7 @@ export function ModelSelect(
   const toastSeq = useRef(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
-  const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const itemRefs = useRef<(HTMLElement | null)[]>([])
   const id = useId()
 
   const choices = useMemo(() => state.groups.flatMap(group =>
@@ -86,18 +87,24 @@ export function ModelSelect(
     : effectiveEffort === undefined
       ? t('effort.providerDefault')
       : reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort
-  const effortChoices = useMemo<readonly EffortChoice[]>(() => reasoning === undefined
-    ? []
-    : [
-      ...reasoning.defaultEffort === undefined
-        ? [{ key: 'provider-default', effort: undefined, label: t('effort.providerDefault') }]
-        : [],
-      ...reasoning.efforts.map((effort: ModelReasoningEffort) => ({
-        key: `effort:${effort.id}`,
-        effort: effort.id,
-        label: effort.name,
-      })),
-    ], [reasoning, t])
+  // The adapter advertises its levels weakest first, so a level's position in
+  // that list is the slider stop and its normalized value the glow intensity.
+  const levels = reasoning?.efforts ?? []
+  const selectedLevelIndex = effectiveEffort === undefined
+    ? -1
+    : levels.findIndex(level => level.id === effectiveEffort)
+  const previewIndex = preview !== null
+    && preview < levels.length
+    && levels[preview]?.id !== effectiveEffort
+    ? preview
+    : null
+  const sliderIndex = previewIndex ?? (selectedLevelIndex < 0 ? 0 : selectedLevelIndex)
+  const sliderIntensity = levels.length > 1 ? sliderIndex / (levels.length - 1) : 0
+  // The provider default has no stop of its own: it keeps the store label and
+  // shows no level description until the user picks a level.
+  const shownLevel = previewIndex !== null || selectedLevelIndex >= 0 ? levels[sliderIndex] : undefined
+  const shownLabel = shownLevel?.name ?? effortLabel
+  const showProviderDefault = reasoning !== undefined && reasoning.defaultEffort === undefined
   const busy = state.status === 'selecting'
 
   const reload = (): void => {
@@ -118,6 +125,7 @@ export function ModelSelect(
 
   const show = (): void => {
     setPane('root')
+    setPreview(null)
     setOpen(true)
     reload()
   }
@@ -125,6 +133,7 @@ export function ModelSelect(
   const close = (restoreFocus = false): void => {
     setOpen(false)
     setPane('root')
+    setPreview(null)
     if (restoreFocus) queueMicrotask(() => { triggerRef.current?.focus() })
   }
 
@@ -177,10 +186,12 @@ export function ModelSelect(
     void select(selection).then(settleSelection)
   }
 
+  // The effort pane stays open across a change: the slider is a continuous
+  // control, so closing on the first committed stop would fight the drag.
   const chooseEffort = (effort: string | undefined): void => {
     if (state.current === null) return
     if (effectiveEffort === effort) {
-      close(true)
+      setPreview(null)
       return
     }
     const selection: ModelSelection = {
@@ -189,7 +200,27 @@ export function ModelSelect(
       ...effort === undefined ? {} : { reasoningEffort: effort },
     }
     lastActionRef.current = 'select'
-    void select(selection).then(settleSelection)
+    void select(selection).then((accepted) => {
+      if (accepted) return
+      setPreview(null)
+      const message = directory.getSnapshot().error
+      if (message !== null) {
+        toastSeq.current += 1
+        setToast({ seq: toastSeq.current, text: t('error.action', { message }) })
+      }
+    })
+  }
+
+  const previewEffort = (event: ChangeEvent<HTMLInputElement>): void => {
+    setPreview(Number(event.target.value))
+  }
+
+  // A pointer release or key release ends one adjustment; the committed level
+  // is whatever the preview holds, and a release without a preview is a no-op.
+  const commitEffort = (): void => {
+    if (previewIndex === null) return
+    const level = levels[previewIndex]
+    if (level !== undefined) chooseEffort(level.id)
   }
 
   const waiting = state.current === null && state.status === 'loading'
@@ -209,7 +240,7 @@ export function ModelSelect(
   let itemIndex = 0
   const itemRef = () => {
     const at = itemIndex++
-    return (node: HTMLButtonElement | null) => { itemRefs.current[at] = node }
+    return (node: HTMLElement | null) => { itemRefs.current[at] = node }
   }
 
   return (
@@ -326,27 +357,94 @@ export function ModelSelect(
                   <button type="button" className={css.retry} onClick={reload}>{t('action.reload')}</button>
                 </div>
               )}
-              {effortChoices.length === 0
+              {levels.length === 0
                 ? <div className={css.empty}>{t('empty.efforts')}</div>
-                : effortChoices.map(level => (
-                  <button
-                    ref={itemRef()}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={effectiveEffort === level.effort}
-                    className={clsx(css.option, effectiveEffort === level.effort && css.selected)}
-                    key={level.key}
-                    disabled={busy}
-                    onClick={() => { chooseEffort(level.effort) }}
-                  >
-                    <span className={css.optionCopy}>
-                      <span className={css.modelName}>{level.label}</span>
-                    </span>
-                    <span className={css.check}>
-                      {effectiveEffort === level.effort ? <IconCheckOutline16 /> : null}
-                    </span>
-                  </button>
-                ))}
+                : (
+                  <div className={css.effortPane}>
+                    {/* A single advertised level has no range to slide: it stays
+                        a selectable row, which is also the only way to pick it
+                        when the adapter declares no default. */}
+                    {levels.length === 1
+                      ? levels.map(level => (
+                        <button
+                          ref={itemRef()}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={effectiveEffort === level.id}
+                          className={clsx(css.option, effectiveEffort === level.id && css.selected)}
+                          key={level.id}
+                          disabled={busy}
+                          onClick={() => { chooseEffort(level.id) }}
+                        >
+                          <span className={css.optionCopy}>
+                            <span className={css.modelName}>{level.name}</span>
+                          </span>
+                          <span className={css.check}>
+                            {effectiveEffort === level.id ? <IconCheckOutline16 /> : null}
+                          </span>
+                        </button>
+                      ))
+                      : (
+                        <>
+                          <div className={css.effortHead}>{shownLabel}</div>
+                          <div
+                            className={css.sliderWrap}
+                            style={{
+                              '--dsh-effort-progress': `${Math.round(sliderIntensity * 1000) / 10}%`,
+                              '--dsh-effort-level': sliderIntensity,
+                            } as CSSProperties}
+                          >
+                            <div className={css.sliderRow}>
+                              <div className={css.sliderTrack} aria-hidden="true">
+                                <div className={css.sliderFill} />
+                              </div>
+                              <input
+                                ref={itemRef()}
+                                type="range"
+                                className={css.slider}
+                                min={0}
+                                max={levels.length - 1}
+                                step={1}
+                                value={sliderIndex}
+                                aria-label={t('menu.effort')}
+                                aria-valuetext={shownLabel}
+                                disabled={busy}
+                                onChange={previewEffort}
+                                onPointerUp={commitEffort}
+                                onKeyUp={commitEffort}
+                              />
+                            </div>
+                            <div className={css.ticks} aria-hidden="true">
+                              {levels.map((level, index) => (
+                                <span
+                                  key={level.id}
+                                  className={clsx(css.tick, index === sliderIndex && css.tickActive)}
+                                >
+                                  {level.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          {shownLevel?.description !== undefined && (
+                            <p className={css.effortDescription}>{shownLevel.description}</p>
+                          )}
+                        </>
+                      )}
+                    {showProviderDefault && (
+                      <button
+                        ref={itemRef()}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={effectiveEffort === undefined}
+                        className={clsx(css.defaultChip, effectiveEffort === undefined && css.defaultChipActive)}
+                        disabled={busy}
+                        onClick={() => { chooseEffort(undefined) }}
+                      >
+                        {t('effort.providerDefault')}
+                      </button>
+                    )}
+                  </div>
+                )}
             </>
           )}
         </div>

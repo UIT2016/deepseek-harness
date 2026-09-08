@@ -110,6 +110,15 @@ const DEFAULT_MODELS: DeepSeekCatalogModel[] = [
     imagePixelBudget: DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET,
     imageMaxBytes: DEFAULT_REQUEST_IMAGE_MAX_BYTES,
   },
+  {
+    id: 'deepseek-v4.1-flash-expires-on-0910',
+    name: 'DeepSeek-V4.1-Flash (expires-on-0910)',
+    description: 'Limited-time beta with native text-and-image input; fast and economical for focused, routine, or parallel tasks.',
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
+    inputModalities: ['text', 'image'],
+    imagePixelBudget: DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET,
+    imageMaxBytes: DEFAULT_REQUEST_IMAGE_MAX_BYTES,
+  },
 ]
 
 const MODEL_MODALITIES = ['text', 'image'] as const satisfies readonly ModelModality[]
@@ -135,7 +144,10 @@ export interface Config {
   maxTokens?: number
   /** Positive context capacity used when the selected model has no exact value (default 1,000,000). */
   defaultContextWindow?: number
-  /** Advisory models shown by discovery consumers; defaults to V4 Flash, V4 Pro, and V4 Flash Vision Exp. */
+  /**
+   * Advisory models shown by discovery consumers; defaults to V4 Flash, V4 Pro, V4 Flash Vision Exp,
+   * and the limited-time V4.1 Flash beta.
+   */
   models?: DeepSeekCatalogModel[]
   /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
   streamIdleTimeoutMs?: number
