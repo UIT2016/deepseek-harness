@@ -184,6 +184,7 @@ const catalogModel: z<DeepSeekCatalogModel> = z.object({
   inputModalities: z.array(z.union(MODEL_MODALITIES)).min(1).default(['text']),
   imagePixelBudget: z.union([z.number().step(1).min(1), 'low']),
   imageMaxBytes: z.number().step(1).min(1),
+  systemPromptUpdate: z.const('in-history'),
 })
 
 export const Config: z<Config> = z.object({
@@ -270,6 +271,11 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
       && (!Number.isSafeInteger(model.imageMaxBytes) || model.imageMaxBytes <= 0)) {
       throw new Error(`llm-deepseek: catalog model "${model.id}" imageMaxBytes must be a positive safe integer`)
     }
+    // Widened: a dynamic config update reaches this check without schema validation.
+    const systemPromptUpdate: string | undefined = model.systemPromptUpdate
+    if (systemPromptUpdate !== undefined && systemPromptUpdate !== 'in-history') {
+      throw new Error(`llm-deepseek: catalog model "${model.id}" systemPromptUpdate must be "in-history" when present`)
+    }
     if (seen.has(model.id)) throw new Error(`llm-deepseek: duplicate catalog model "${model.id}"`)
     seen.add(model.id)
     return {
@@ -278,6 +284,7 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
       ...model.description === undefined ? {} : { description: model.description },
       ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
       ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
+      ...model.systemPromptUpdate === undefined ? {} : { systemPromptUpdate: model.systemPromptUpdate },
       inputModalities: [...inputModalities],
       ...hasImage
         ? {
