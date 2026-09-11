@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSH 控制台</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1d2026; --border: #2c313a; --text: #e6e8ec;
+    --muted: #8b93a1; --green: #3fb96c; --red: #d9534f; --blue: #4a9ede;
+    --yellow: #d8a83f; --purple: #a678e0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    max-width: 860px; margin: 0 auto;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  header .paths { color: var(--muted); font-size: 12px; width: 100%; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
+    border-radius: 999px; font-size: 13px; border: 1px solid var(--border); background: var(--panel);
+  }
+  .pill .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .pill.on .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .pill.busy .dot { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  section { margin-bottom: 18px; }
+  section h2 { font-size: 13px; color: var(--muted); margin: 0 0 8px; text-transform: uppercase; letter-spacing: 1px; }
+  .buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+  button {
+    padding: 10px 18px; font-size: 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); cursor: pointer; transition: filter .12s, opacity .12s;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.25); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.green { border-color: var(--green); color: var(--green); }
+  button.red { border-color: var(--red); color: var(--red); }
+  button.blue { border-color: var(--blue); color: var(--blue); }
+  #log {
+    background: #0d0f12; border: 1px solid var(--border); border-radius: 8px;
+    height: 340px; overflow-y: auto; padding: 10px 12px; margin: 0;
+    font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; line-height: 1.5;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  #log .service { color: var(--blue); }
+  #log .build { color: var(--yellow); }
+  #log .install { color: var(--purple); }
+  #log .open { color: var(--muted); }
+  #toast {
+    position: fixed; top: 16px; right: 16px; padding: 10px 16px; border-radius: 8px;
+    background: var(--red); color: #fff; font-size: 13px; display: none; max-width: 60%;
+  }
+  footer { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>DSH 控制台</h1>
+  <span id="service-pill" class="pill"><span class="dot"></span><span id="service-text">检测中…</span></span>
+  <span id="task-pill" class="pill" style="display:none"><span class="dot"></span><span id="task-text"></span></span>
+  <span class="paths" id="paths"></span>
+</header>
+
+<section>
+  <h2>Harness 服务 (dsh web · :3080)</h2>
+  <div class="buttons">
+    <button id="btn-start" class="green">▶ 启动服务</button>
+    <button id="btn-stop" class="red">■ 停止服务</button>
+    <button id="btn-gui" class="blue">🌐 打开 GUI</button>
+  </div>
+</section>
+
+<section>
+  <h2>仓库</h2>
+  <div class="buttons">
+    <button id="btn-build">🔨 构建 (pnpm run build)</button>
+    <button id="btn-install">📦 安装 (pnpm install)</button>
+    <button id="btn-open-repo">📁 打开仓库文件夹</button>
+    <button id="btn-open-home">📁 打开数据目录 ($DSH_HOME)</button>
+  </div>
+</section>
+
+<section>
+  <h2>日志 <button id="btn-clear" style="padding:2px 10px; font-size:12px; margin-left:8px">清空</button></h2>
+  <pre id="log"></pre>
+</section>
+
+<footer>
+  <span id="dropped"></span>
+  <button id="btn-shutdown" style="padding:4px 12px; font-size:12px">退出启动器</button>
+</footer>
+
+<div id="toast"></div>
+
+<script>
+const token = new URLSearchParams(location.search).get('token')
+const logEl = document.getElementById('log')
+const toastEl = document.getElementById('toast')
+let toastTimer = null
+
+function toast(message) {
+  toastEl.textContent = message
+  toastEl.style.display = 'block'
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toastEl.style.display = 'none' }, 5000)
+}
+
+async function api(path, body) {
+  try {
+    const res = await fetch(path, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { 'content-type': 'application/json', 'x-token': token ?? '' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (data.error) toast(data.error)
+    return data
+  } catch {
+    return { error: '无法连接启动器' }
+  }
+}
+
+function appendLine(source, line) {
+  const span = document.createElement('span')
+  span.className = source
+  span.textContent = `[${source}] ${line}\n`
+  const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 30
+  logEl.appendChild(span)
+  while (logEl.childNodes.length > 4000) logEl.removeChild(logEl.firstChild)
+  if (atBottom) logEl.scrollTop = logEl.scrollHeight
+}
+
+const TASK_LABELS = { build: '构建', install: '安装' }
+
+async function refreshStatus() {
+  const s = await api('/api/status')
+  if (s.error) return
+  const pill = document.getElementById('service-pill')
+  const text = document.getElementById('service-text')
+  pill.className = 'pill' + (s.running ? ' on' : '')
+  text.textContent = s.running
+    ? '服务运行中' + (s.ours && s.pid ? ` (PID ${s.pid})` : '') + ' · ' + s.serviceUrl
+    : '服务未运行'
+  const taskPill = document.getElementById('task-pill')
+  if (s.task) {
+    taskPill.style.display = ''
+    taskPill.className = 'pill busy'
+    document.getElementById('task-text').textContent = `${TASK_LABELS[s.task] ?? s.task}中…`
+  } else {
+    taskPill.style.display = 'none'
+  }
+  document.getElementById('paths').textContent = `仓库: ${s.repoRoot} ｜ 数据: ${s.dshHome}`
+  document.getElementById('dropped').textContent = s.droppedLines > 0 ? `（日志已满，丢弃了 ${s.droppedLines} 行旧输出）` : ''
+  document.getElementById('btn-start').disabled = s.running
+  document.getElementById('btn-stop').disabled = !s.running && !s.ours
+  document.getElementById('btn-build').disabled = s.task !== null
+  document.getElementById('btn-install').disabled = s.task !== null
+}
+
+document.getElementById('btn-start').onclick = async () => { await api('/api/start', {}); setTimeout(refreshStatus, 1500) }
+document.getElementById('btn-stop').onclick = async () => { await api('/api/stop', {}); setTimeout(refreshStatus, 1500) }
+document.getElementById('btn-gui').onclick = () => api('/api/open', { what: 'gui' })
+document.getElementById('btn-build').onclick = () => api('/api/run', { name: 'build' })
+document.getElementById('btn-install').onclick = () => api('/api/run', { name: 'install' })
+document.getElementById('btn-open-repo').onclick = () => api('/api/open', { what: 'repo' })
+document.getElementById('btn-open-home').onclick = () => api('/api/open', { what: 'home' })
+document.getElementById('btn-clear').onclick = () => { logEl.textContent = '' }
+document.getElementById('btn-shutdown').onclick = async () => {
+  await api('/api/shutdown', {})
+  document.body.innerHTML = '<h1 style="margin-top:40px; text-align:center">启动器已退出，本页可关闭</h1>'
+}
+
+async function boot() {
+  if (!token) {
+    document.body.innerHTML = '<h1 style="margin-top:40px; text-align:center">链接缺少令牌 — 请通过桌面快捷方式重新打开</h1>'
+    return
+  }
+  const { lines } = await api('/api/logs')
+  for (const { source, line } of lines ?? []) appendLine(source, line)
+  const events = new EventSource(`/api/events?token=${encodeURIComponent(token)}`)
+  events.addEventListener('log', (e) => {
+    const { source, line } = JSON.parse(e.data)
+    appendLine(source, line)
+  })
+  events.addEventListener('status', () => refreshStatus())
+  await refreshStatus()
+  setInterval(refreshStatus, 3000)
+}
+
+boot()
+</script>
+</body>
+</html>
