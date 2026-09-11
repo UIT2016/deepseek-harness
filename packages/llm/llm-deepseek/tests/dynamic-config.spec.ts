@@ -217,9 +217,9 @@ describe('request-level dynamic configuration', () => {
       source: { kind: 'plugin', plugin: 'test' },
     })]
 
-    await assemble(ctx, { model: 'deepseek-v4-flash-vision-exp', messages })
+    await assemble(ctx, { model: 'deepseek-flash', messages })
     await ctx.settings.update(NS, { maxRequestFilesBytes: 4, imageOffloadByteQuantum: 2 })
-    await assemble(ctx, { model: 'deepseek-v4-flash-vision-exp', messages })
+    await assemble(ctx, { model: 'deepseek-flash', messages })
 
     const first = (server.requests[0] as { messages: Array<{ content: unknown }> }).messages[0]?.content
     const second = (server.requests[1] as { messages: Array<{ content: unknown }> }).messages[0]?.content
