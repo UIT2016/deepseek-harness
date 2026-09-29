@@ -83,6 +83,14 @@
 </section>
 
 <section>
+  <h2>维护</h2>
+  <div class="buttons">
+    <button id="btn-clean-explorers">🧹 清理残留 Explorer</button>
+  </div>
+  <p style="color: var(--muted); font-size: 12px; margin: 8px 0 0;">"显示文件位置"不弹窗时先点这里：清除每次打开/定位失败遗留的隐藏 explorer 进程（保留桌面 Shell），并修复后续定位的委派目标。</p>
+</section>
+
+<section>
   <h2>日志 <button id="btn-clear" style="padding:2px 10px; font-size:12px; margin-left:8px">清空</button></h2>
   <pre id="log"></pre>
 </section>
@@ -166,6 +174,10 @@ document.getElementById('btn-build').onclick = () => api('/api/run', { name: 'bu
 document.getElementById('btn-install').onclick = () => api('/api/run', { name: 'install' })
 document.getElementById('btn-open-repo').onclick = () => api('/api/open', { what: 'repo' })
 document.getElementById('btn-open-home').onclick = () => api('/api/open', { what: 'home' })
+document.getElementById('btn-clean-explorers').onclick = async () => {
+  await api('/api/clean-explorers', {})
+  setTimeout(refreshStatus, 1000)
+}
 document.getElementById('btn-clear').onclick = () => { logEl.textContent = '' }
 document.getElementById('btn-shutdown').onclick = async () => {
   await api('/api/shutdown', {})

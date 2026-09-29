@@ -12,7 +12,8 @@ DSH 构建，不随 git 分发**（本目录已被本机的 `.git/info/exclude` 
 | 🌐 打开 GUI | 浏览器打开 `http://127.0.0.1:3080` |
 | 🔨 构建 | `pnpm run build` |
 | 📦 安装 | `pnpm install` |
-| 📁 打开仓库/数据目录 | `explorer.exe <仓库>` / `explorer.exe <$DSH_HOME>` |
+| 📁 打开仓库/数据目录 | `cmd /c start`（ShellExecute 复用已有 Explorer，不产生残留进程） |
+| 🧹 清理残留 Explorer | 终止非桌面 Shell 的 explorer 残留进程（修复"显示文件位置"不弹窗） |
 
 ## 文件
 
@@ -44,3 +45,4 @@ DSH 构建，不随 git 分发**（本目录已被本机的 `.git/info/exclude` 
 
 - 停止服务会杀掉任何监听 3080 的进程（包括正在使用的 Web GUI 会话）
 - 构建期间不要同时跑 `pnpm run dev:web`（两者写同一批 lib/ 产物，官方已禁止并行）
+- **"显示文件位置"不弹窗的修复**：`explorer.exe /select,<path>` 是单实例委派，若系统里残留了多个隐藏 explorer 进程（每次打开/定位失败遗留），新请求会委派给隐藏的残留实例而不弹窗。点「🧹 清理残留 Explorer」即可恢复（保留桌面 Shell）；「打开仓库/数据目录」已改为 `cmd /c start` 复用现有 Explorer，避免继续产生残留。

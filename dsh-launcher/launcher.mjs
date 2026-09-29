@@ -45,11 +45,41 @@ const TASKS = {
   install: { command: 'pnpm', args: ['install'] },
 }
 
-/** Fire-and-forget open actions; explorer/start detach immediately. */
+/** Fire-and-forget open actions; start/explorer detach immediately.
+ *  Direct `spawn('explorer.exe', ...)` creates a NEW explorer process that may
+ *  never exit when its handoff to the existing shell fails, accumulating
+ *  hidden leftovers that poison every later `/select,` reveal. All opens go
+ *  through `cmd /c start` (ShellExecute semantics) so Windows reuses the
+ *  running Explorer shell instead.
+ */
 const OPENS = {
-  repo: () => spawn('explorer.exe', [REPO_ROOT], { detached: true, stdio: 'ignore' }).unref(),
-  home: () => spawn('explorer.exe', [DSH_HOME], { detached: true, stdio: 'ignore' }).unref(),
+  repo: () => spawn('cmd', ['/c', 'start', '""', REPO_ROOT], { detached: true, stdio: 'ignore', windowsHide: true }).unref(),
+  home: () => spawn('cmd', ['/c', 'start', '""', DSH_HOME], { detached: true, stdio: 'ignore', windowsHide: true }).unref(),
   gui: () => spawn('cmd', ['/c', 'start', '""', SERVICE_URL], { detached: true, stdio: 'ignore', windowsHide: true }).unref(),
+}
+
+/**
+ * Kill leftover explorer.exe processes from this session while keeping the
+ * desktop shell (the single explorer owning the "Program Manager" window).
+ * Leftovers — reveal/open instances whose handoff failed — hold a hidden
+ * "文件资源管理器" window and never exit, so later `/select,` reveals hand
+ * off to a dead hidden target instead of showing a window.
+ * @param log - line sink that records the cleanup outcome.
+ */
+async function cleanExplorers(log) {
+  const script = `
+$shell = Get-Process explorer -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq 'Program Manager' } | Select-Object -First 1
+$keep = @()
+if ($shell) { $keep += $shell.Id }
+$targets = @(Get-Process explorer -ErrorAction SilentlyContinue | Where-Object { $_.Id -notin $keep })
+foreach ($p in $targets) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+"killed=$($targets.Count) left=$((Get-Process explorer -ErrorAction SilentlyContinue).Count)"`
+  const out = await new Promise((resolve) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true }, (err, stdout) => {
+      resolve((err ? String(err) : '') + stdout)
+    })
+  })
+  log('clean-explorers', `清理残留 Explorer: ${out.trim() || '(无输出)'}`)
 }
 
 const sseClients = new Set()
@@ -296,6 +326,11 @@ const server = createServer((req, res) => {
           open()
           logLine('open', `已打开: ${body.what}`)
           sendJson(res, 200, {})
+          return
+        }
+        if (url.pathname === '/api/clean-explorers') {
+          sendJson(res, 200, {})
+          await cleanExplorers(logLine)
           return
         }
         if (url.pathname === '/api/shutdown') {
