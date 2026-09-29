@@ -439,6 +439,7 @@
     { "path": "./packages/experimental/agent-team" },
     { "path": "./packages/experimental/agent-team-profile" },
     { "path": "./packages/experimental/tool-agent-team" },
+    { "path": "./packages/experimental/skill-factory" },
     { "path": "./packages/workflow/workflow" },
     { "path": "./packages/workflow/workflow-ptc" },
     { "path": "./packages/workflow/tool-workflow" },

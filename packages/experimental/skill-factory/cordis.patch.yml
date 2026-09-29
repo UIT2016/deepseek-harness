@@ -1,0 +1,8 @@
+# Experimental Skill Factory over the shipped Web composition. The host row owns
+# the durable checkpoint domain, the deterministic distillation pipeline, and
+# the skill-usage metrics listener; the model-facing tools live in the
+# `./tool` entry and are composed by an agent preset (see the package README).
+
+- insert:
+    - id: skill-factory-host
+      name: '@deepseek-ai/dsh-experimental-skill-factory'
