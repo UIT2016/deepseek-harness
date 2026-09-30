@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { normalizeContext } from '@earendil-works/pi-ai'
 import type { AssistantMessageEvent, Model } from '@earendil-works/pi-ai'
 import { stream as streamCompletions } from '@earendil-works/pi-ai/api/openai-completions'
 import { stream as streamResponses } from '@earendil-works/pi-ai/api/openai-responses'
+import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript'
 import { closeMockServers, mockServer } from './mock-server.ts'
 
 afterEach(closeMockServers)

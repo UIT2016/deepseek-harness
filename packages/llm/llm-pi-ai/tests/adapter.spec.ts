@@ -916,7 +916,10 @@ describe('provider profile lifecycle', () => {
         content: [{ type: 'image', attachment: IMAGE_REF }],
         source: { kind: 'model', provider: 'deepseek-official', model: 'deepseek-v4-flash' },
       })],
-    })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
+    })).rejects.toMatchObject({
+      code: 'UNSUPPORTED_CONTENT',
+      message: 'pi-ai model "deepseek-v4-pro" does not support image input',
+    })
     await expect(drain({
       provider: 'openai',
       model: 'gpt-4.1',
