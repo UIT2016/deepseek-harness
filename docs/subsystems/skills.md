@@ -263,6 +263,32 @@ Host service backing `ctx.remote.skills` without activating a cold Agent.
 
 Source: [`packages/api/session-controller/src/skill-catalog.ts`](../../packages/api/session-controller/src/skill-catalog.ts)
 
+<a id="ctxskillfactory--skillfactoryservice"></a>
+
+### `ctx.skillFactory` — `SkillFactoryService`
+
+Distills reusable skills from one workspace's sessions and their delivered files. Deterministic phases (discovery, digests, clustering, gating, settlement, checkpointing) live here; the two model-driven phases run as workflow scripts supplied by the caller.
+
+```ts cordis-catalog
+/**
+ * Read the stored status for one workspace.
+ * @param workspace - Absolute workspace root.
+ * @returns run state and this workspace's skills.
+ */
+status(workspace: string): SkillFactoryStatus
+
+/**
+ * Run one distillation pass over a workspace.
+ * @param request - Mode, dry-run flag, and optional explicit session subset.
+ * @param exec - Workspace, caller lifetime, and the workflow-script runner.
+ * @returns accounting, candidate dispositions, and the workspace's skills.
+ * @throws when another run holds the lock, or when the caller cannot run scripts.
+ */
+async distill(request: DistillRequest, exec: DistillExecution): Promise<SkillFactoryReport>
+```
+
+Source: [`packages/experimental/skill-factory/src/host.ts`](../../packages/experimental/skill-factory/src/host.ts)
+
 <a id="ctxskills--skillregistry"></a>
 
 ### `ctx.skills` — `SkillRegistry`

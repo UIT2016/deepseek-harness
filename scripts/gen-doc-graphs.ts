@@ -580,6 +580,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Merges provider skill catalogs; tool-skill renders the session-prefix catalog and loads complete skill bodies.',
   },
   {
+    key: 'skillFactory',
+    pkg: 'experimental-skill-factory',
+    title: 'Workspace skill distillation factory',
+    mode: 'service',
+    note: 'Distills reusable skills from the sessions of one workspace and the files those sessions delivered; the deterministic phases live here and the two model-driven phases run as workflow scripts supplied by the caller.',
+  },
+  {
     key: 'agents',
     pkg: 'agent',
     title: 'Agent service',

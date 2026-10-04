@@ -115,6 +115,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   sessions: 'session.md',
   settings: 'settings.md',
   sessionTitle: 'session-title.md',
+  skillFactory: 'skills.md',
   skills: 'skills.md',
   spillStore: 'spill.md',
   storage: 'storage.md',
@@ -945,6 +946,10 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   TerminalFrame: 'Browser terminal stream frames are owned by packages/api/terminal-controller/README.md',
   TerminalRetentionFrame: 'Browser terminal window holds are owned by packages/api/terminal-controller/README.md',
   WebTerminalId: 'Browser terminal identity is owned by packages/api/terminal-controller/README.md',
+  SkillFactoryStatus: 'experimental package-local status record is owned by packages/experimental/skill-factory/src/types.ts',
+  DistillRequest: 'experimental package-local distillation request is owned by packages/experimental/skill-factory/src/types.ts',
+  DistillExecution: 'experimental package-local caller context is owned by packages/experimental/skill-factory/src/types.ts',
+  SkillFactoryReport: 'experimental package-local run report is owned by packages/experimental/skill-factory/src/types.ts',
 }
 
 /** Repository data policy consumed by the Cordis catalog projector. */

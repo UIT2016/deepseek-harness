@@ -10,64 +10,64 @@
   zh: 125b4575286debf5
 /deepseek-ai-dsh-experimental-skill-factory/summary:
   en: b0bbb1ae7c1ca14c
-  zh: 7ca77e1c05047c3b
+  zh: 0190f63cef14cd97
 /deepseek-ai-dsh-experimental-skill-factory/table-of-contents:
   en: d152484eb41ac6b4
-  zh: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
 /deepseek-ai-dsh-experimental-skill-factory/use-this-package:
   en: bbff250eba0f1b89
-  zh: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
 /deepseek-ai-dsh-experimental-skill-factory/use-this-package/install-into-a-profile:
   en: 5a5f653f91c50c2e
-  zh: b49c02c5ebd665bf
+  zh: de50d30664690249
 /deepseek-ai-dsh-experimental-skill-factory/use-this-package/compose-the-model-tools:
   en: dbcc381eceba3fba
-  zh: 7034a50fe0a892ad
+  zh: 15ca8b45fc0f81b8
 /deepseek-ai-dsh-experimental-skill-factory/use-this-package/wire-a-source-checkout:
   en: 60c2e55d5f1c47c3
-  zh: a4cf06fdcd6c0a96
+  zh: 3a8a6cddb9fd7a16
 /deepseek-ai-dsh-experimental-skill-factory/use-this-package/what-you-get:
   en: dc067577879809ab
-  zh: 8438a96a32ac1a8e
+  zh: d393ff6114cda97a
 /deepseek-ai-dsh-experimental-skill-factory/use-this-package/schedule-the-loop:
   en: ff56de1a63729d04
-  zh: 47c71aec4b61f2a9
+  zh: 8ebf8e46ff456ed7
 /deepseek-ai-dsh-experimental-skill-factory/understand-the-implementation:
   en: bbd9aa3fced614c8
-  zh: c4fd9b2748bd8459
+  zh: 2297d5d8c563fe76
 /deepseek-ai-dsh-experimental-skill-factory/further-exploration:
   en: c71333007ce5125a
-  zh: d0bc79704d0a7a8e
+  zh: 802c443f2e5f4b3f
 /deepseek-ai-dsh-experimental-skill-factory/model-experience:
   en: 215e7ba838619b7b
-  zh: 215e7ba838619b7b
+  zh: a311da3843709f90
 /deepseek-ai-dsh-experimental-skill-factory/model-experience/tools-on-the-preset-s-agents:
   en: ebc376621fb837f7
-  zh: ebc376621fb837f7
+  zh: 9dd958d0bfa5fe3b
 /deepseek-ai-dsh-experimental-skill-factory/model-experience/tools-on-the-preset-s-agents/what-the-model-sees:
   en: c5a35da97e9ae6ed
-  zh: 785ce5521b2a5ba6
+  zh: 9d131643c887df9f
 /deepseek-ai-dsh-experimental-skill-factory/model-experience/tools-on-the-preset-s-agents/token-effect:
   en: 298035ef50f0393b
-  zh: e43580d798b504d5
+  zh: 26a085a106a5b885
 /deepseek-ai-dsh-experimental-skill-factory/model-experience/tools-on-the-preset-s-agents/kv-cache-effect:
   en: 410757dfb744903d
-  zh: d6de3d6219bd5a6a
+  zh: 5aaa8478b31b2280
 /deepseek-ai-dsh-experimental-skill-factory/model-experience/distill-results:
   en: cf1d4e158628c8b5
-  zh: cf1d4e158628c8b5
+  zh: 54faac31a6d9264a
 /deepseek-ai-dsh-experimental-skill-factory/model-experience/distill-results/what-the-model-sees:
   en: f112a39dfd235adf
-  zh: 3d08c555aa51861e
+  zh: a85088dc163bdbc0
 /deepseek-ai-dsh-experimental-skill-factory/model-experience/distill-results/token-effect:
   en: 67f176cfddf6c518
-  zh: b777384109de64ad
+  zh: 8816419854ca7108
 /deepseek-ai-dsh-experimental-skill-factory/model-experience/distill-results/kv-cache-effect:
   en: d613fdf1762c5069
-  zh: ab694d1971a9fe32
+  zh: 8281ef2ae9305c1b
 /deepseek-ai-dsh-experimental-skill-factory/known-limitations-and-deferred-work:
   en: 9c74c8383e6bdc43
-  zh: 4978a9054059c9af
+  zh: b88067571bc876b8
 /deepseek-ai-dsh-experimental-skill-factory/known-limitations-and-deferred-work/dev-note:
   en: 1876ee47d01a5ce7
-  zh: 19681e23899a9fb2
+  zh: e9724f599073735f

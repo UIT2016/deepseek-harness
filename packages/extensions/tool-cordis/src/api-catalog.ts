@@ -2619,6 +2619,26 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'skillFactory',
+    summary: 'Distills reusable skills from one workspace\'s sessions and their delivered files.',
+    description: 'Distills reusable skills from one workspace\'s sessions and their delivered files. Deterministic phases (discovery, digests, clustering, gating, settlement, checkpointing) live here; the two model-driven phases run as workflow scripts supplied by the caller.',
+    methods: [
+      {
+        signature: 'status(workspace: string): SkillFactoryStatus',
+        description: 'Read the stored status for one workspace.',
+        parameters: [{ name: 'workspace', description: 'Absolute workspace root.' }],
+        returns: 'run state and this workspace\'s skills.',
+      },
+      {
+        signature: 'async distill(request: DistillRequest, exec: DistillExecution): Promise<SkillFactoryReport>',
+        description: 'Run one distillation pass over a workspace.',
+        parameters: [{ name: 'request', description: 'Mode, dry-run flag, and optional explicit session subset.' }, { name: 'exec', description: 'Workspace, caller lifetime, and the workflow-script runner.' }],
+        returns: 'accounting, candidate dispositions, and the workspace\'s skills.',
+        throws: ['when another run holds the lock, or when the caller cannot run scripts.'],
+      },
+    ],
+  },
+  {
     key: 'skills',
     summary: 'Layered registry of skill providers, the host+per-scope shape the tools registry established.',
     description: 'Layered registry of skill providers, the host+per-scope shape the tools registry established. A registration files into the layer of its calling context\'s scope (scopeOf): host rows and repository plugins land in the global layer, while a plugin mounted by an agent preset\'s standing composition lands in that preset\'s layer. A read merges the global layer with the viewing scope\'s chain — the nearest layer\'s entry wins a duplicate name outright, and the rank order decides duplicates only within one layer. It exposes sorted invocation-neutral summaries and loads full skill bodies on demand.',
@@ -5070,6 +5090,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DirectoryRegistrationHandle {\n    (): void;\n    replace(entries: readonly LlmConfigurableProvider[]): void;\n}',
   },
   {
+    name: 'DistillExecution',
+    declaration: 'export interface DistillExecution {\n    cwd: string;\n    signal?: AbortSignal;\n    runScript: (request: ScriptRunRequest) => Promise<ScriptRunResult>;\n    log?: (message: string) => void;\n}',
+  },
+  {
+    name: 'DistillRequest',
+    declaration: 'export interface DistillRequest {\n    mode?: SkillFactoryMode;\n    dryRun?: boolean;\n    sessionIds?: readonly SessionId[];\n}',
+  },
+  {
     name: 'Domain',
     declaration: 'export interface Domain<S extends DomainSpec> {\n    readonly name: string;\n    readonly global: DomainGlobalHandleOf<S>;\n    table<N extends keyof S[\'tables\'] & string>(name: N): KvTable<TableKeyOf<S, N>, TableValueOf<S, N>>;\n    close(): Promise<void>;\n}',
   },
@@ -6390,6 +6418,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ScopeKey = object;',
   },
   {
+    name: 'ScriptRunRequest',
+    declaration: 'export interface ScriptRunRequest {\n    script: string;\n    meta: {\n        name: string;\n        description: string;\n    };\n    args?: Record<string, unknown>;\n}',
+  },
+  {
+    name: 'ScriptRunResult',
+    declaration: 'export type ScriptRunResult = {\n    ok: true;\n    value: unknown;\n} | {\n    ok: false;\n    error: string;\n};',
+  },
+  {
     name: 'SearchFileMatches',
     declaration: 'export interface SearchFileMatches {\n    path: string;\n    matches: SearchLineMatch[];\n}',
   },
@@ -7042,10 +7078,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SignInErrorCode = \'network\' | \'protocol\' | \'expired\' | \'storage\';',
   },
   {
-    name: 'SkillCandidate',
-    declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
-  },
-  {
     name: 'SkillCatalogSnapshot',
     declaration: 'export interface SkillCatalogSnapshot {\n    readonly skills: SkillSummary[];\n    readonly complete: boolean;\n}',
   },
@@ -7054,8 +7086,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SkillDefinition extends SkillSummary {\n    readonly content: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
   {
+    name: 'SkillDocType',
+    declaration: 'export type SkillDocType = \'document\' | \'workflow\' | \'mixed\';',
+  },
+  {
     name: 'SkillEntry',
     declaration: 'export interface SkillEntry {\n    readonly path?: string;\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly modelInvocable: boolean;\n}',
+  },
+  {
+    name: 'SkillFactoryMode',
+    declaration: 'export type SkillFactoryMode = \'incremental\' | \'full\' | \'revise-only\';',
+  },
+  {
+    name: 'SkillFactoryReport',
+    declaration: 'export interface SkillFactoryReport {\n    mode: SkillFactoryMode;\n    workspace: string;\n    dryRun: boolean;\n    sessions: {\n        total: number;\n        skipped: number;\n        processed: number;\n        failed: number;\n    };\n    patterns: number;\n    clusters: number;\n    candidates: SkillCandidate[];\n    skills: SkillStatus[];\n    errors: {\n        sessionId: string;\n        message: string;\n    }[];\n}',
+  },
+  {
+    name: 'SkillFactoryStatus',
+    declaration: 'export interface SkillFactoryStatus {\n    lastRunAt: number;\n    lastRunMode: string;\n    running: boolean;\n    sessions: number;\n    skills: SkillStatus[];\n}',
   },
   {
     name: 'SkillInvocationPolicy',
@@ -7072,6 +7120,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillLookupOptions',
     declaration: 'export interface SkillLookupOptions {\n    readonly cwd?: string | undefined;\n    readonly signal?: AbortSignal | undefined;\n}',
+  },
+  {
+    name: 'SkillMetrics',
+    declaration: 'export interface SkillMetrics {\n    executions: number;\n    revisions: number;\n    revisionRate: number;\n}',
   },
   {
     name: 'SkillProvider',
@@ -7096,6 +7148,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillSource',
     declaration: 'export type SkillSource = \'project-dsh\' | \'project-agents\' | \'runtime\' | \'user-dsh\' | \'user-agents\' | \'custom\' | \'bundled\' | (string & {});',
+  },
+  {
+    name: 'SkillStatus',
+    declaration: 'export interface SkillStatus {\n    name: string;\n    docType: SkillDocType;\n    workspace: string;\n    versions: number;\n    createdAt: number;\n    updatedAt: number;\n    sourceSessions: number;\n    metrics: SkillMetrics;\n}',
   },
   {
     name: 'SkillSummary',
