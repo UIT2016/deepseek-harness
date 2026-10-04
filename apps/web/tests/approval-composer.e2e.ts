@@ -120,10 +120,10 @@ describe.each(MODE === 'record' ? ['button'] as const : ['button', 'keyboard'] a
     }
 
     if (method === 'button') await panel.getByRole('button', { name: 'Allow once' }).click()
-    else {
-      await scroll.focus()
-      await page.keyboard.press('Enter')
-    }
+    // The keyboard path never focuses the panel: hiding the composer it
+    // replaces drops focus to the document body, and the takeover answers the
+    // Enter keydown that arrives from there.
+    else await page.keyboard.press('Enter')
 
     const sessionId = await settled
     if (MODE === 'record') {

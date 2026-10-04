@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
 import { createScope, scopeOf } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ShortcutContext, ShortcutFixedInput, ShortcutGesture } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -23,6 +24,14 @@ type ApprovalListener = (
   next: () => Promise<'unavailable'>,
 ) => Promise<unknown>
 
+/** One fixed keydown the window keyboard adapter would deliver. */
+interface FixedPress {
+  target?: Element | null
+  region?: ShortcutContext['region']
+  modal?: string | null
+  gesture?: Partial<Omit<ShortcutGesture, 'code'>>
+}
+
 interface PluginBench {
   readonly ctx: Context
   readonly listener: ApprovalListener
@@ -32,6 +41,12 @@ interface PluginBench {
   readonly disposeLocale: ReturnType<typeof vi.fn>
   readonly register: ReturnType<typeof vi.fn>
   readonly injectSlot: ReturnType<typeof vi.fn>
+  readonly fixed: {
+    registered(): readonly { id?: unknown; keys?: unknown; group?: unknown; label?: () => string }[]
+    press(code: string, press?: FixedPress): { consumed: boolean }
+    reset(): void
+    disposed(): boolean
+  }
   releasePending(): Promise<void>
   registration(): {
     options: {
@@ -55,6 +70,9 @@ async function setupPlugin(): Promise<PluginBench> {
   const disposeSlot = vi.fn()
   const disposeLocale = vi.fn()
   const pending = new Map<PendingApproval, () => Promise<void>>()
+  const fixedRows: { id?: unknown; keys?: unknown; group?: unknown; label?: () => string }[] = []
+  let fixedListener: ((input: ShortcutFixedInput) => void) | undefined
+  let fixedDisposed = false
   const registerPendingInteraction = vi.fn((_precedence: (value: PendingApproval) => number) => (
     value: PendingApproval,
     delegate: () => Promise<void>,
@@ -85,7 +103,18 @@ async function setupPlugin(): Promise<PluginBench> {
   ctx.provide('slots', { inject: injectSlot, register } as never)
   ctx.provide('locale', {
     register: vi.fn(() => disposeLocale),
+    bind: () => (key: string) => key,
     resolveText: (reason: NonNullable<PendingApproval['displayReason']>) => reason.en,
+  } as never)
+  ctx.provide('shortcuts', {
+    registerFixed: (command: { id?: unknown; keys?: unknown; group?: unknown; label?: () => string }) => {
+      fixedRows.push(command)
+      return () => {}
+    },
+    observeFixedInput: (observe: (input: ShortcutFixedInput) => void) => {
+      fixedListener = observe
+      return () => { fixedDisposed = true }
+    },
   } as never)
 
   const fiber = ctx.plugin({ apply })
@@ -100,6 +129,36 @@ async function setupPlugin(): Promise<PluginBench> {
     disposeLocale,
     register,
     injectSlot,
+    fixed: {
+      registered: () => fixedRows,
+      press(code, press = {}) {
+        if (fixedListener === undefined) throw new Error('fixed input observer was not installed')
+        let consumed = false
+        fixedListener({
+          type: 'keydown',
+          gesture: {
+            code,
+            control: false,
+            alt: false,
+            shift: false,
+            meta: false,
+            repeat: false,
+            composing: false,
+            defaultPrevented: false,
+            ...press.gesture,
+          },
+          context: {
+            region: press.region ?? 'page',
+            modal: press.modal ?? null,
+            target: press.target === undefined ? document.body : press.target,
+          },
+          consume: () => { consumed = true },
+        })
+        return { consumed }
+      },
+      reset() { fixedListener?.({ type: 'reset' }) },
+      disposed: () => fixedDisposed,
+    },
     async releasePending() {
       const delegates = [...pending.values()]
       pending.clear()
@@ -309,6 +368,7 @@ describe('approval Remote Event consumer', () => {
     await bench.ctx.fiber.dispose()
     expect(bench.disposeSlot).toHaveBeenCalledOnce()
     expect(bench.disposeLocale).toHaveBeenCalledOnce()
+    expect(bench.fixed.disposed()).toBe(true)
   })
 })
 
@@ -494,6 +554,193 @@ describe('ApprovalPanel', () => {
     expect(document.querySelector('[data-approval-key]')?.getAttribute('aria-busy')).toBe('false')
     pending.abort(new Error('test cleanup'))
     await pending.result.catch(() => {})
+  })
+})
+
+describe('approval fixed keys', () => {
+  const openScopes: { dispose(): Promise<void> }[] = []
+
+  afterEach(async () => {
+    await Promise.all(openScopes.splice(0).map(scope => scope.dispose()))
+  })
+
+  /**
+   * Publish one request through the plugin and render the takeover it elects.
+   * @returns the plugin bench, its pending request, and the waterfall result.
+   */
+  async function showTakeover() {
+    const bench = await setupPlugin()
+    const scope = createScope(bench.ctx, id('s1'))
+    await scope.fiber.await()
+    openScopes.push(scope.fiber)
+    const result = bench.listener.call(scope.ctx, { toolName: 'bash' }, () => Promise.resolve('unavailable'))
+    const pending = bench.pending.getSnapshot()[0]!
+    render(<ApprovalPanel {...panelProps(pending)} />)
+    return { bench, pending, result }
+  }
+
+  it('reserves Enter and Escape for the approval group', async () => {
+    const bench = await setupPlugin()
+
+    const rows = bench.fixed.registered()
+    expect(rows).toEqual([
+      expect.objectContaining({ id: 'approval.allow', keys: ['Enter'], group: 'approval' }),
+      expect.objectContaining({ id: 'approval.reject', keys: ['Esc'], group: 'approval' }),
+    ])
+    expect(rows.map(row => row.label?.())).toEqual(['allowOnce', 'reject'])
+  })
+
+  it('answers the visible takeover with Enter from outside the panel', async () => {
+    const { bench, pending, result } = await showTakeover()
+
+    const { consumed } = bench.fixed.press('Enter')
+
+    expect(consumed).toBe(true)
+    await expect(result).resolves.toBe('allowed-once')
+    expect(pending.answerable).toBe(false)
+  })
+
+  it('answers the visible takeover with Escape as a rejection', async () => {
+    const { bench, result } = await showTakeover()
+
+    expect(bench.fixed.press('Escape').consumed).toBe(true)
+
+    await expect(result).resolves.toBe('rejected')
+  })
+
+  it('leaves keys raised inside the panel to its own handler', async () => {
+    const { bench, pending, result } = await showTakeover()
+    const group = screen.getByRole('group', { name: 'Approval details' })
+
+    expect(bench.fixed.press('Enter', { target: group }).consumed).toBe(false)
+    expect(pending.answerable).toBe(true)
+
+    group.focus()
+    fireEvent.keyDown(group, { key: 'Enter', code: 'Enter' })
+    await expect(result).resolves.toBe('allowed-once')
+  })
+
+  it('leaves Enter on a control to its activation and keeps Escape for the approval', async () => {
+    const { bench, pending, result } = await showTakeover()
+    const control = document.createElement('button')
+    document.body.append(control)
+    try {
+      expect(bench.fixed.press('Enter', { target: control }).consumed).toBe(false)
+      expect(pending.answerable).toBe(true)
+
+      expect(bench.fixed.press('Escape', { target: control }).consumed).toBe(true)
+      await expect(result).resolves.toBe('rejected')
+    } finally { control.remove() }
+  })
+
+  it.each<[string, FixedPress]>([
+    ['a held key', { gesture: { repeat: true } }],
+    ['an IME candidate', { gesture: { composing: true } }],
+    ['a key another owner claimed', { gesture: { defaultPrevented: true } }],
+    ['a Ctrl chord', { gesture: { control: true } }],
+    ['an Alt chord', { gesture: { alt: true } }],
+    ['a Shift chord', { gesture: { shift: true } }],
+    ['a Meta chord', { gesture: { meta: true } }],
+    ['input behind a dialog', { modal: 'settings' }],
+    ['terminal input', { region: 'terminal' }],
+    ['input without a document target', { target: null }],
+  ])('ignores %s', async (_name, press) => {
+    const { bench, pending } = await showTakeover()
+
+    expect(bench.fixed.press('Enter', press).consumed).toBe(false)
+    expect(pending.answerable).toBe(true)
+  })
+
+  it('ignores a key that belongs to no fixed approval action', async () => {
+    const { bench, pending } = await showTakeover()
+
+    expect(bench.fixed.press('KeyA').consumed).toBe(false)
+    expect(pending.answerable).toBe(true)
+  })
+
+  it('answers nothing while no takeover is on screen', async () => {
+    const bench = await setupPlugin()
+    const scope = createScope(bench.ctx, id('s1'))
+    await scope.fiber.await()
+    openScopes.push(scope.fiber)
+    const result = bench.listener.call(scope.ctx, { toolName: 'read' }, () => Promise.resolve('unavailable'))
+    const pending = bench.pending.getSnapshot()[0]!
+
+    expect(bench.fixed.press('Enter').consumed).toBe(false)
+    expect(pending.answerable).toBe(true)
+
+    await pending.answer('allowed-once')
+    await expect(result).resolves.toBe('allowed-once')
+  })
+
+  it('answers nothing when several takeovers compete', async () => {
+    const { bench, pending } = await showTakeover()
+    render(<ApprovalPanel {...panelProps(pending)} />)
+
+    expect(document.querySelectorAll('[data-approval-key]').length).toBe(2)
+    expect(bench.fixed.press('Enter').consumed).toBe(false)
+    expect(pending.answerable).toBe(true)
+  })
+
+  it('keeps the keys of a usable editable', async () => {
+    const { bench, pending } = await showTakeover()
+    const draft = document.createElement('textarea')
+    document.body.append(draft)
+    try {
+      expect(bench.fixed.press('Enter', { target: draft, region: 'editable' }).consumed).toBe(false)
+      expect(bench.fixed.press('Escape', { target: draft, region: 'editable' }).consumed).toBe(false)
+      expect(pending.answerable).toBe(true)
+    } finally { draft.remove() }
+  })
+
+  it('answers the takeover the composer left behind once it was hidden', async () => {
+    const { bench, pending, result } = await showTakeover()
+
+    // Hiding the takeover's fallback drops focus to the document body, so the
+    // keydown arrives from there rather than from the replaced composer.
+    expect(bench.fixed.press('Enter', { target: document.body }).consumed).toBe(true)
+
+    await expect(result).resolves.toBe('allowed-once')
+    expect(pending.answerable).toBe(false)
+  })
+
+  it('ignores a takeover without a live request', async () => {
+    const bench = await setupPlugin()
+    const stale = new PendingApproval(id('s1'), { toolName: 'bash' })
+    render(<ApprovalPanel {...panelProps(stale)} />)
+
+    expect(bench.fixed.press('Enter').consumed).toBe(false)
+    expect(stale.answerable).toBe(true)
+  })
+
+  it('refuses a second key for a request it has already answered', async () => {
+    const { bench, result } = await showTakeover()
+
+    expect(bench.fixed.press('Enter').consumed).toBe(true)
+    expect(bench.fixed.press('Enter').consumed).toBe(false)
+
+    await expect(result).resolves.toBe('allowed-once')
+  })
+
+  it('keeps a sequence reset from answering anything', async () => {
+    const { bench, pending } = await showTakeover()
+
+    bench.fixed.reset()
+
+    expect(pending.answerable).toBe(true)
+  })
+
+  it('reports a failed keyboard answer', async () => {
+    const { bench, pending } = await showTakeover()
+    const failure = new Error('transport closed')
+    vi.spyOn(pending, 'answer').mockRejectedValue(failure)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    expect(bench.fixed.press('Enter').consumed).toBe(true)
+
+    await waitFor(() => {
+      expect(logged).toHaveBeenCalledWith('ui-approval: keyboard answer failed', failure)
+    })
   })
 })
 

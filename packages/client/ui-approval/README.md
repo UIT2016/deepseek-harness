@@ -18,7 +18,7 @@ Browser approval presentation over the Agent-scoped Remote Event waterfall. The 
 
 -----
 
-Focus the approval detail region to approve with Enter or reject with Escape. The mounted plugin reserves both keys against editable shortcuts. Enter on the focused Reject button retains its native reject action. Input controls and IME candidates keep their own keys. Keyboard and pointer actions share one pending-request lock; a withdrawn or replaced request cannot accept another answer, and an earlier failed answer cannot unlock its replacement.
+Enter approves and Esc rejects the visible request from anywhere in the window, including while focus stays in the draft the takeover hides. Keys raised inside the panel stay with its own focused handler; a usable editable outside the takeover keeps all its keys, and Enter on a focused control keeps the control's activation. The mounted plugin reserves both keys against editable shortcuts. Several visible panels, or none, answer nothing. Keyboard and pointer actions share one pending-request lock; a withdrawn or replaced request cannot accept another answer, and an earlier failed answer cannot unlock its replacement.
 
 <a id="model-experience"></a>
 ## Model Experience

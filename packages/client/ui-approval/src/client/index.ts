@@ -10,6 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { ApprovalPanel } from './ApprovalPanel.tsx'
 import { PendingApproval } from './contract/slots.ts'
+import { installApprovalKeys } from './fixed-keys.ts'
 import { en, zh } from './locales.ts'
 
 export type {
@@ -32,13 +33,23 @@ type ClientApprovalNext = Parameters<ApprovalListener>[1]
 type ClientApprovalOutcome = Awaited<ReturnType<ApprovalListener>>
 
 /* jscpd:ignore-start -- Approval and Question intentionally mirror one Remote waterfall lifecycle. */
-/** Present one request until the user answers or its lifetime ends. */
+/**
+ * Present one request until the user answers or its lifetime ends.
+ * @param ctx - Client root context.
+ * @param owner - Agent-scoped context owning the request.
+ * @param request - Host approval request projected through the Remote Event.
+ * @param next - Delegation to the next waterfall listener.
+ * @param registerPendingInteraction - Publication of the visible pending request.
+ * @param pendings - Live requests keyed by the panel identity that renders them.
+ * @returns The decision returned to the Host waterfall.
+ */
 async function answerApproval(
   ctx: ClientContext,
   owner: ClientContext,
   request: ClientApprovalRequest,
   next: ClientApprovalNext,
   registerPendingInteraction: PendingInteractionPublisher<PendingApproval>,
+  pendings: Map<string, PendingApproval>,
 ): Promise<ClientApprovalOutcome> {
   const sessionId = ctx.sessions.scopeOf(owner)
   if (sessionId === undefined) return next()
@@ -56,6 +67,7 @@ async function answerApproval(
     pending.delegate()
     await completed.promise
   })
+  pendings.set(pending.key, pending)
   try {
     try {
       return await pending.result
@@ -64,6 +76,7 @@ async function answerApproval(
       throw error
     }
   } finally {
+    pendings.delete(pending.key)
     remove()
     completed.resolve()
   }
@@ -76,6 +89,7 @@ async function answerApproval(
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-approval: dictionaries')
+  const pendings = new Map<string, PendingApproval>()
   ctx.inject(['shortcuts'], (scope) => {
     const t = ctx.locale.bind(NS)
     scope.effect(() => scope.shortcuts.registerFixed({
@@ -84,6 +98,7 @@ export function apply(ctx: ClientContext): void {
     scope.effect(() => scope.shortcuts.registerFixed({
       id: 'approval.reject' as ShortcutCommandId, label: () => t('reject'), keys: ['Esc'], bindings: [{ code: 'Escape', modifiers: [] }], group: 'approval',
     }), 'ui-approval: fixed reject reference')
+    scope.effect(() => installApprovalKeys(pendings, scope.shortcuts), 'ui-approval: fixed key routing')
   })
   const registerPendingInteraction = ctx.uiSession.registerPendingInteraction<PendingApproval>(
     () => 0,
@@ -102,6 +117,6 @@ export function apply(ctx: ClientContext): void {
     },
   }, ApprovalPanel))
   ctx.remote.$on('approval/request', function (request, next) {
-    return answerApproval(ctx, this, request, next, registerPendingInteraction)
+    return answerApproval(ctx, this, request, next, registerPendingInteraction, pendings)
   })
 }
