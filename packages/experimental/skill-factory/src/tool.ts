@@ -20,7 +20,7 @@ export const name = 'skill-factory-tool'
 /** Services these tools resolve: the registries, the host service, and the caller's workflow engine. */
 export const inject = ['tools', 'systemPrompt', 'skillFactory', 'workflowEngine']
 
-export { Config } from './config.ts'
+export { ToolConfigSchema as Config } from './config.ts'
 
 /** Text results, rendered as-is (the session-query tools' output form). */
 const TEXT_OUTPUT = {

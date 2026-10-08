@@ -20,7 +20,7 @@ import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { access, readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { clusterPatterns, gateCluster, opposingSessions, signPattern, stableClusterId, type SignedPattern } from './cluster.ts'
-import type { HostConfig } from './config.ts'
+import { Config, type HostConfig } from './config.ts'
 import {
   skillFactoryDomainSpec,
   skillKey,
@@ -108,6 +108,7 @@ interface PreparedCandidate {
  */
 export default class SkillFactoryService extends Service {
   static inject = ['storageDomain', 'sessionQuery']
+  static Config = Config
 
   private handles?: DomainHandles
   private readonly config: HostConfig
