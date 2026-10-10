@@ -10,6 +10,10 @@
 #   - preset-skill-factory: the shipped `standard` composition plus two rows —
 #     tool-session-query (prior-session tools for a manual review) and
 #     skill-factory-tool (skill_factory_distill and skill_factory_status).
+#     Both rows resolve from this bundle's own dependencies, so a profile that
+#     installed the package needs no separate install for them; a profile
+#     patch that names a plugin nothing supplies leaves that row pending and
+#     marks the whole preset unusable.
 #   - session-query-sqlite: moves from `openAt: never` to `first-search` so
 #     those two search tools work; every other tool is unchanged.
 
