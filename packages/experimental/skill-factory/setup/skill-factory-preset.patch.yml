@@ -30,7 +30,9 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              suffix: Your working directory is {{cwd}}.
+              # No persona suffix: interpolation is strict against registered
+              # prompt variables, and only `provider` and `model` are
+              # registered — a `{{cwd}}` suffix aborts every request.
               prefix: You are a coding agent powered by the {{model}} model.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
