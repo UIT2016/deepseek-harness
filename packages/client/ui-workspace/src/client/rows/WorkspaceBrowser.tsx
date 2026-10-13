@@ -31,10 +31,12 @@ import { workspaceDisplayTitle } from '@deepseek-ai/dsh-api-workspace-controller
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
-import type { ArchivedFilter, GroupNode, SessionNode, SessionOrderBy, SessionRowState } from '../tree.ts'
+import type {
+  ArchivedFilter, GroupNode, SessionNode, SessionOrderBy, SessionRowState, WorkspaceOrderBy,
+} from '../tree.ts'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
-  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, UNGROUPED_KEY,
+  deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, orderWorkspacesByActivity,
+  owningGroupKey, owningParentFolder, pinCurrentBlank, reconcileManualOrder, sessionMemberIds, UNGROUPED_KEY,
 } from '../tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
 import { AnimatedRows } from './AnimatedRows.tsx'
@@ -103,13 +105,18 @@ function useNativeDragAcceptance(active: boolean): void {
 }
 
 /** Grouping, ordering, and archived-filter menu; own open state so it resets with the wide chrome. */
-function ViewOptionsMenu({ groupBy, orderBy, archivedFilter, onGroupPick, onOrderPick, onArchivedFilterPick, t }: {
+function ViewOptionsMenu({
+  groupBy, orderBy, archivedFilter, workspaceOrderBy, onGroupPick, onOrderPick, onArchivedFilterPick,
+  onWorkspaceOrderPick, t,
+}: {
   groupBy: SessionGroupBy
   orderBy: SessionOrderBy
   archivedFilter: ArchivedFilter
+  workspaceOrderBy: WorkspaceOrderBy
   onGroupPick: (mode: SessionGroupBy) => void
   onOrderPick: (mode: SessionOrderBy) => void
   onArchivedFilterPick: (filter: ArchivedFilter) => void
+  onWorkspaceOrderPick: (mode: WorkspaceOrderBy) => void
   t: WorkspaceBrowserProps['t']
 }) {
   const [open, setOpen] = useState(false)
@@ -126,6 +133,13 @@ function ViewOptionsMenu({ groupBy, orderBy, archivedFilter, onGroupPick, onOrde
         { type: 'label' as const, id: 'order-by', text: t('orderBy.label') },
         { id: 'manual', label: t('orderBy.manual'), icon: <IconChevronsUpDownOutlineRegular /> },
         { id: 'updated', label: t('orderBy.updated'), icon: <IconClockOutlineRegular /> },
+        // Workspace order has no meaning in the hierarchy-free flat list.
+        ...(groupBy === 'flat' ? [] : [
+          { type: 'separator' as const, id: 'workspace-order-separator' },
+          { type: 'label' as const, id: 'workspace-order-by', text: t('workspaceOrderBy.label') },
+          { id: 'workspace-manual', label: t('workspaceOrderBy.manual'), icon: <IconChevronsUpDownOutlineRegular /> },
+          { id: 'workspace-activity', label: t('workspaceOrderBy.activity'), icon: <IconClockOutlineRegular /> },
+        ]),
         { type: 'separator' as const, id: 'archived-filter-separator' },
         { type: 'label' as const, id: 'filter-by', text: t('filterBy.label') },
         { id: 'hide-archived', label: t('viewOptions.hideArchived'), icon: <IconArchiveOffOutlineRegular /> },
@@ -135,11 +149,14 @@ function ViewOptionsMenu({ groupBy, orderBy, archivedFilter, onGroupPick, onOrde
       selectedIds={[
         groupBy,
         orderBy,
+        ...(groupBy === 'flat' ? [] : [workspaceOrderBy === 'activity' ? 'workspace-activity' : 'workspace-manual']),
         { default: 'hide-archived', show: 'show-archived', only: 'only-archived' }[archivedFilter],
       ]}
       onSelect={(id) => {
         if (id === 'workspace' || id === 'workspace-tree' || id === 'flat') onGroupPick(id)
         else if (id === 'manual' || id === 'updated') onOrderPick(id)
+        else if (id === 'workspace-manual') onWorkspaceOrderPick('manual')
+        else if (id === 'workspace-activity') onWorkspaceOrderPick('activity')
         else if (id === 'hide-archived') onArchivedFilterPick('default')
         else if (id === 'show-archived') onArchivedFilterPick('show')
         else if (id === 'only-archived') onArchivedFilterPick('only')
@@ -231,6 +248,8 @@ type SessionTreeProps = Pick<
   home?: string | undefined
   /** Workspaces in Host group order with browser-projected Session order. */
   workspaces: readonly WorkspaceView[]
+  /** Workspace section order: Host order or latest Session activity. */
+  workspaceOrderBy: WorkspaceOrderBy
   /** Browser-projected order for Sessions outside every Workspace. */
   ungroupedSessionIds: readonly SessionId[]
   /** Whether the current Workspace stream has a complete Host baseline. */
@@ -286,7 +305,7 @@ function SessionTree({
   renderSlot,
   insertWorkspaceBefore,
   nestWorkspaces, groupExpansion, setGroupExpanded,
-  setSessionOrder, home, t,
+  setSessionOrder, home, t, workspaceOrderBy,
   revealSessionId, onSessionRevealed, shortcuts,
 }: SessionTreeProps) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
@@ -312,15 +331,21 @@ function SessionTree({
     if (current === undefined || currentGroup === undefined || Object.hasOwn(groupExpansion, currentGroup)) return
     setGroupExpanded(currentGroup, true)
   }, [current, currentGroup, setGroupExpanded, groupExpansion])
+  const orderedWorkspaces = useMemo(
+    () => workspaceOrderBy === 'activity'
+      ? orderWorkspacesByActivity(workspaces, list.byId, rowState.archivedSessionIds)
+      : workspaces,
+    [workspaceOrderBy, workspaces, list.byId, rowState.archivedSessionIds],
+  )
   const parents = useMemo(() => {
     if (!nestWorkspaces) return new Map<string, WorkspaceId | undefined>()
-    const keysByPath = new Map(workspaces.map(workspace => [workspace.path, workspace.workspaceId]))
+    const keysByPath = new Map(orderedWorkspaces.map(workspace => [workspace.path, workspace.workspaceId]))
     const paths = [...keysByPath.keys()]
-    return new Map<string, WorkspaceId | undefined>(workspaces.map((workspace) => {
+    return new Map<string, WorkspaceId | undefined>(orderedWorkspaces.map((workspace) => {
       const path = owningParentFolder(workspace.path, paths)
       return [workspace.workspaceId, path === undefined ? undefined : keysByPath.get(path)]
     }))
-  }, [nestWorkspaces, workspaces])
+  }, [nestWorkspaces, orderedWorkspaces])
   const currentAncestors = useMemo(() => {
     const keys = new Set<string>()
     for (let key = currentGroup === undefined ? undefined : parents.get(currentGroup); key !== undefined; key = parents.get(key)) {
@@ -330,15 +355,15 @@ function SessionTree({
   }, [currentGroup, parents])
   const expandedGroups = useMemo(() => {
     const ancestorKeys = new Set<string | undefined>(parents.values())
-    return [...workspaces.map(workspace => workspace.workspaceId), UNGROUPED_KEY]
+    return [...orderedWorkspaces.map(workspace => workspace.workspaceId), UNGROUPED_KEY]
       .filter(key => groupExpansion[key] ?? ancestorKeys.has(key))
-  }, [groupExpansion, parents, workspaces])
+  }, [groupExpansion, parents, orderedWorkspaces])
   const groups = useMemo(
-    () => deriveGroups(list, workspaces, rowState, statuses, {
+    () => deriveGroups(list, orderedWorkspaces, rowState, statuses, {
       expandedGroups,
       ungroupedOrder: ungroupedSessionIds,
     }),
-    [list, workspaces, rowState, statuses, expandedGroups, ungroupedSessionIds],
+    [list, orderedWorkspaces, rowState, statuses, expandedGroups, ungroupedSessionIds],
   )
   useEffect(() => {
     for (let key = revealGroup; key !== undefined; key = parents.get(key)) {
@@ -378,7 +403,7 @@ function SessionTree({
     workspaceDropCommitted.current = true
     setWorkspaceDrag(null)
     const owner = parents.get(activeDrag.workspaceId)
-    const siblings = workspaces.filter(workspace => parents.get(workspace.workspaceId) === owner)
+    const siblings = orderedWorkspaces.filter(workspace => parents.get(workspace.workspaceId) === owner)
     const rowIndex = siblings.findIndex(workspace => workspace.workspaceId === over.id)
     if (rowIndex === -1) return
     const anchor = over.half === 'before' ? over.id : siblings[rowIndex + 1]?.workspaceId
@@ -427,7 +452,8 @@ function SessionTree({
     const workspaceMarker = workspaceId !== undefined && workspaceDrag?.over?.id === workspaceId
       ? workspaceDrag.over.half
       : null
-    const workspaceDragProps = workspaceId === undefined ? undefined : {
+    // Activity order is Host-derived: a drag cannot express a new position there.
+    const workspaceDragProps = workspaceId === undefined || workspaceOrderBy !== 'manual' ? undefined : {
       start: () => {
         workspaceDropCommitted.current = false
         setWorkspaceDrag({ workspaceId, over: null })
@@ -892,6 +918,9 @@ export function WorkspaceBrowser({
   const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
   const groupBy = useStore(s => s.groupBy)
   const orderBy = useStore(s => s.orderBy)
+  // Persisted view blobs written before Workspace ordering existed rehydrate
+  // without the field; they read as the default Host order.
+  const workspaceOrderBy = useStore(s => s.workspaceOrderBy ?? 'manual')
   // Persisted view blobs written before the archived filter existed rehydrate
   // without the field; they read as the default hide-archived view.
   const archivedFilter = useStore(s => s.archivedFilter ?? 'default')
@@ -1275,9 +1304,11 @@ export function WorkspaceBrowser({
               groupBy={groupBy}
               orderBy={orderBy}
               archivedFilter={archivedFilter}
+              workspaceOrderBy={workspaceOrderBy}
               onGroupPick={actions.setGroupBy}
               onOrderPick={(mode) => { actions.setOrderBy(mode, activeSessionOrders) }}
               onArchivedFilterPick={actions.setArchivedFilter}
+              onWorkspaceOrderPick={actions.setWorkspaceOrderBy}
               t={t}
             />
           )}
@@ -1367,7 +1398,7 @@ export function WorkspaceBrowser({
                 rowState={rowState}
                 onLeaveArchivedOnly={leaveArchivedOnly}
                 workspaceReady={workspaceReady}
-                animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}`}
+                animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}/${workspaceOrderBy}`}
                 useSessionStatus={useSessionStatus}
                 open={guardedOpen}
                 onSessionRenameRequest={requestSessionRename}
@@ -1390,7 +1421,8 @@ export function WorkspaceBrowser({
                 ungroupedSessionIds={orderedUngroupedSessionIds}
                 workspaceReady={workspaceReady}
                 nestWorkspaces={groupBy === 'workspace-tree'}
-                animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}`}
+                animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}/${workspaceOrderBy}`}
+                workspaceOrderBy={workspaceOrderBy}
                 groupExpansion={groupExpansion}
                 setGroupExpanded={actions.setGroupExpanded}
                 setSessionOrder={saveSessionOrder}

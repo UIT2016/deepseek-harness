@@ -8,6 +8,10 @@
   - menuitem "Manual"
   - menuitem "Last updated"
   - separator
+  - text: Workspace order
+  - menuitem "Default order"
+  - menuitem "Recent activity"
+  - separator
   - text: Filter sessions
   - menuitem "Hide archived"
   - menuitem "All conversations (show archived)"

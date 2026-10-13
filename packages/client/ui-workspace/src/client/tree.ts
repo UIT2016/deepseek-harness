@@ -156,6 +156,63 @@ export function orderByRecency(
     .map(member => member.id)
 }
 
+/** Workspace order selected by the Workspace browser. */
+export type WorkspaceOrderBy = 'manual' | 'activity'
+
+/**
+ * Latest activity time among one Workspace's known Sessions.
+ * @param workspace - Workspace whose membership is scanned.
+ * @param summaries - current Session summaries; members without a summary are skipped.
+ * @param excluded - Session ids to ignore, such as archived rows.
+ * @returns the newest qualifying `updatedAt`, or undefined when no member qualifies.
+ */
+export function workspaceActivityAt(
+  workspace: Pick<WorkspaceView, 'sessionIds'>,
+  summaries: SessionListState['byId'],
+  excluded?: ReadonlySet<SessionId>,
+): number | undefined {
+  let latest: number | undefined
+  for (const sessionId of workspace.sessionIds) {
+    if (excluded?.has(sessionId) === true) continue
+    const summary = summaries[sessionId]
+    if (summary === undefined) continue
+    latest = latest === undefined ? summary.updatedAt : Math.max(latest, summary.updatedAt)
+  }
+  return latest
+}
+
+/**
+ * Order Workspaces by latest Session activity, keeping Host order within ties.
+ * @param workspaces - Workspaces in Host order.
+ * @param summaries - current Session summaries.
+ * @param archivedSessionIds - archived Sessions excluded from the activity measure.
+ * @returns a new array with active Workspaces first by descending activity, then
+ * the rest, each group in input order.
+ */
+export function orderWorkspacesByActivity(
+  workspaces: readonly WorkspaceView[],
+  summaries: SessionListState['byId'],
+  archivedSessionIds: readonly SessionId[],
+): WorkspaceView[] {
+  const excluded = new Set(archivedSessionIds)
+  return workspaces
+    .map((workspace, index) => ({
+      workspace,
+      index,
+      activity: workspaceActivityAt(workspace, summaries, excluded),
+    }))
+    .sort((a, b) => {
+      const left = a.activity
+      const right = b.activity
+      if (left === undefined && right === undefined) return a.index - b.index
+      if (left === undefined) return 1
+      if (right === undefined) return -1
+      if (left !== right) return right - left
+      return a.index - b.index
+    })
+    .map(entry => entry.workspace)
+}
+
 /**
  * Reconcile a browser-local manual order with current account membership.
  * New ordinary forks precede their sources without changing saved entries' relative order.

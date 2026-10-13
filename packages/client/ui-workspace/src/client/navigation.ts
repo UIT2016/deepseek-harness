@@ -21,6 +21,7 @@ import type { DraftInitializationOptions } from '@deepseek-ai/dsh-client-ui-conv
 import type { RowToast } from './contract/slots.ts'
 import { pinOrderAccounts, pinOrderSource } from './pin-order.ts'
 import type { WorkspaceViewStoreActions } from './stores.ts'
+import { workspaceActivityAt } from './tree.ts'
 
 interface MainSelection {
   readonly sessionId?: SessionId
@@ -490,12 +491,7 @@ function recentWorkspace(
   let selected: WorkspaceId | undefined
   let selectedTime = Number.NEGATIVE_INFINITY
   for (const workspace of workspaces) {
-    let latest = Number.NEGATIVE_INFINITY
-    for (const sessionId of workspace.sessionIds) {
-      const session = sessions[sessionId]
-      if (session !== undefined) latest = Math.max(latest, session.updatedAt)
-    }
-    if (latest === Number.NEGATIVE_INFINITY) latest = Date.parse(workspace.createdAt)
+    const latest = workspaceActivityAt(workspace, sessions) ?? Date.parse(workspace.createdAt)
     if (selected === undefined || latest > selectedTime) {
       selected = workspace.workspaceId
       selectedTime = latest

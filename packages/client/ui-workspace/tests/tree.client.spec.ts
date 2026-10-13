@@ -8,8 +8,10 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SessionProjectionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 import {
   type ArchivedFilter,
-  deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
-  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
+  deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, orderWorkspacesByActivity,
+  owningGroupKey, owningParentFolder,
+  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds,
+  workspaceActivityAt, workspaceLabel, UNGROUPED_KEY,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
@@ -213,6 +215,62 @@ describe('Session ordering', () => {
       .toEqual([sid('blank'), sid('newer'), sid('older')])
     expect(pinCurrentBlank([sid('newer'), sid('older')], undefined))
       .toEqual([sid('newer'), sid('older')])
+  })
+})
+
+describe('Workspace activity ordering', () => {
+  it('takes the newest summary time across member Sessions', () => {
+    const summaries = list(summary('a', 10), summary('b', 30), summary('c', 20)).byId
+    expect(workspaceActivityAt(workspace('w', ['a', 'b', 'c']), summaries)).toBe(30)
+  })
+
+  it('skips members without a summary and members excluded by the caller', () => {
+    const summaries = list(summary('a', 10), summary('b', 30)).byId
+    expect(workspaceActivityAt(workspace('w', ['missing', 'b']), summaries)).toBe(30)
+    expect(workspaceActivityAt(workspace('w', ['a', 'b']), summaries, new Set([sid('b')]))).toBe(10)
+  })
+
+  it('counts subagent Sessions and yields undefined without a qualifying member', () => {
+    const subagent = { ...summary('sub', 42), origin: 'subagent' as const }
+    expect(workspaceActivityAt(workspace('w', ['sub']), list(subagent).byId)).toBe(42)
+    expect(workspaceActivityAt(workspace('w', []), list(subagent).byId)).toBeUndefined()
+    expect(workspaceActivityAt(workspace('w', ['missing']), list(subagent).byId)).toBeUndefined()
+  })
+
+  it('orders Workspaces by descending activity', () => {
+    const summaries = list(summary('a', 10), summary('b', 30), summary('c', 20)).byId
+    const workspaces = [workspace('w1', ['a']), workspace('w2', ['b']), workspace('w3', ['c'])]
+    expect(orderWorkspacesByActivity(workspaces, summaries, []).map(w => w.workspaceId))
+      .toEqual([wid('w2'), wid('w3'), wid('w1')])
+  })
+
+  it('keeps Host order for equal activity and sinks Workspaces without activity', () => {
+    const summaries = list(summary('a', 10), summary('c', 10)).byId
+    const tied = [workspace('first', ['a']), workspace('second', ['c'])]
+    expect(orderWorkspacesByActivity(tied, summaries, []).map(w => w.workspaceId))
+      .toEqual([wid('first'), wid('second')])
+    const dead = [workspace('dead-a', []), workspace('dead-b', ['missing'])]
+    expect(orderWorkspacesByActivity(dead, summaries, []).map(w => w.workspaceId))
+      .toEqual([wid('dead-a'), wid('dead-b')])
+    expect(orderWorkspacesByActivity([workspace('dead', []), workspace('live', ['a'])], summaries, [])
+      .map(w => w.workspaceId)).toEqual([wid('live'), wid('dead')])
+    expect(orderWorkspacesByActivity([workspace('live', ['a']), workspace('dead', [])], summaries, [])
+      .map(w => w.workspaceId)).toEqual([wid('live'), wid('dead')])
+  })
+
+  it('does not modify the input array', () => {
+    const summaries = list(summary('a', 10), summary('b', 20)).byId
+    const workspaces = [workspace('w1', ['b']), workspace('w2', ['a'])]
+    const snapshot = [...workspaces]
+    orderWorkspacesByActivity(workspaces, summaries, [])
+    expect(workspaces).toEqual(snapshot)
+  })
+
+  it('ignores archived Sessions when measuring activity', () => {
+    const summaries = list(summary('a', 10), summary('archived', 99)).byId
+    const workspaces = [workspace('heavy', ['archived']), workspace('ordinary', ['a'])]
+    expect(orderWorkspacesByActivity(workspaces, summaries, [sid('archived')]).map(w => w.workspaceId))
+      .toEqual([wid('ordinary'), wid('heavy')])
   })
 })
 
