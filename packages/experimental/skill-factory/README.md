@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This layer adds a host service that reads one workspace's session history and the files those sessions delivered, clusters the repeatable task patterns it finds, and authors a `SKILL.md` per evidence-backed candidate into that workspace's skill root. A profile gains the durable checkpoint domain, the skill-usage metrics listener, and two model tools the repository's own agent presets do not mount. Add it to a profile, then compose the `./tool` entry into an agent preset that runs in the target workspace. The package ships as an experimental bundle and is not part of any in-box bundle.
+This layer adds a host service that reads one workspace's session history and the files those sessions delivered, clusters the repeatable task patterns it finds, and authors a `SKILL.md` per evidence-backed candidate into that workspace's skill root. A profile gains the durable checkpoint domain, the skill-usage metrics listener, and two model tools the repository's own agent presets do not mount. Add it to a profile; the bundle also declares the `skill-factory` agent preset that mounts the `./tool` entry, so a session running that preset distills the workspace it runs in. The package ships as an experimental bundle and is not part of any in-box bundle.
 
 ## Table of Contents
 
@@ -38,7 +38,7 @@ The layer's `cordis.patch.yml` inserts one host row, `skill-factory-host`, which
 
 ### Compose the model tools
 
-The tools are not in the bundle patch: a workspace that should distill its own sessions needs an agent preset that mounts them, because the tools derive their workspace from the calling session's working directory.
+The tool row is not in the host bundle layer: the shipped `skill-factory` agent preset mounts it, because the tools derive their workspace from the calling session's working directory.
 
 ```yaml
 # An agent preset's agent.cordis.yml, alongside the delegation group:
@@ -57,7 +57,7 @@ pnpm install          # links this workspace package
 pnpm run build        # emits the lib/ entry a profile loads
 ```
 
-Then paste [`setup/skill-factory-preset.patch.yml`](setup/skill-factory-preset.patch.yml) into `$DSH_HOME/profiles/web/cordis.patch.yml` and restart that profile. The fragment inserts the host row, the `skill-factory` preset, and the lazy search index. Adding `@deepseek-ai/dsh-experimental-skill-factory` to the profile's `dsh.profile.bundles` instead is equivalent for the host row, and the fragment's own host row must then be dropped.
+Then install the bundle like any other: the plugin manager adds `@deepseek-ai/dsh-experimental-skill-factory` to `dsh.profile.bundles`, and the package carries two patch layers — `cordis.patch.yml` inserts the `skill-factory-host` row, `presets/skill-factory.patch.yml` declares agent preset id `skill-factory`. Restart the profile and the preset appears in the session preset roster. Its plugin list is a copy of the shipped `standard` composition, because an agent preset has no inheritance; regenerate it after a DSH upgrade with `node packages/experimental/skill-factory/setup/sync-preset.mjs --check` (then `--write`). The one piece a profile still owns is the lazy search index: override the `session-query-sqlite` row with `openAt: first-search` (restating `path`), or the preset's prior-session tools never see an index.
 
 ### What you get
 
@@ -82,11 +82,12 @@ A recurring run is a Host task-board card pinned to the target workspace, the pr
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The bundle patch inserts exactly one row, so a profile cannot half-enable the feature. Everything else is the tool entry.
+The bundle layers insert the host row and the preset declaration; the tool row lives only inside that preset, so a profile cannot half-enable the feature.
 
 | File | Role |
 |---|---|
 | [`cordis.patch.yml`](cordis.patch.yml) | The bundle layer: one `insert` entry mounting `skill-factory-host`. |
+| [`presets/skill-factory.patch.yml`](presets/skill-factory.patch.yml) | The agent-preset layer: the `skill-factory` preset, derived from the shipped `standard` composition plus this package's rows. |
 | [`src/index.ts`](src/index.ts) | Host entry: re-exports the service and the public vocabulary. |
 | [`src/host.ts`](src/host.ts) | The service: discovery, checkpointing, clustering, settlement, metrics. |
 | [`src/tool.ts`](src/tool.ts) | The two model tools and the workflow-engine binding. |

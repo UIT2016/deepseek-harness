@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-这一层新增一个 Host 服务：读取某个工作区的会话历史与这些会话交付的文件，聚类其中反复出现的任务模式，并为每个有证据支撑的候选把一个 `SKILL.md` 写入该工作区的 skill 目录。profile 由此获得持久化检查点域、skill 使用指标监听，以及两个仓库自带 agent 预设不会挂载的模型工具。把它加入 profile，再把 `./tool` 入口组合进一个在目标工作区运行的 agent 预设。该包以实验性 bundle 形式发布，不属于任何自带 bundle。
+这一层新增一个 Host 服务：读取某个工作区的会话历史与这些会话交付的文件，聚类其中反复出现的任务模式，并为每个有证据支撑的候选把一个 `SKILL.md` 写入该工作区的 skill 目录。profile 由此获得持久化检查点域、skill 使用指标监听，以及两个仓库自带 agent 预设不会挂载的模型工具。把它加入 profile 即可：本包同时声明了挂载 `./tool` 入口的 `skill-factory` agent 预设，运行该预设的会话会提炼自己所在的工作区。该包以实验性 bundle 形式发布，不属于任何自带 bundle。
 
 ## 目录
 
@@ -38,7 +38,7 @@ dsh plugin --profile <name> remove @deepseek-ai/dsh-experimental-skill-factory
 
 ### 组合模型工具
 
-两个工具不在 bundle patch 里：需要自行提炼会话的工作区必须有一个挂载它们的 agent 预设，因为工具以调用会话的工作目录作为工作区。
+两个工具不在 Host bundle 层里：本包自带的 `skill-factory` agent 预设挂载它们，因为工具以调用会话的工作目录作为工作区。
 
 ```yaml
 # An agent preset's agent.cordis.yml, alongside the delegation group:
@@ -57,7 +57,7 @@ pnpm install          # links this workspace package
 pnpm run build        # emits the lib/ entry a profile loads
 ```
 
-然后把 [`setup/skill-factory-preset.patch.yml`](setup/skill-factory-preset.patch.yml) 粘贴进 `$DSH_HOME/profiles/web/cordis.patch.yml` 并重启该 profile。这段 fragment 会插入 Host 行、`skill-factory` 预设，以及惰性搜索索引。把 `@deepseek-ai/dsh-experimental-skill-factory` 加入 profile 的 `dsh.profile.bundles` 对 Host 行是等价做法，此时要删掉 fragment 自带的那个 Host 行。
+然后像普通 bundle 一样安装：插件管理器会把 `@deepseek-ai/dsh-experimental-skill-factory` 加进 `dsh.profile.bundles`，而本包自带两层 patch —— `cordis.patch.yml` 插入 `skill-factory-host` 行，`presets/skill-factory.patch.yml` 声明 agent 预设 id `skill-factory`。重启 profile 后该预设就出现在会话预设名册里。它的插件列表是出货 `standard` 组合的一份拷贝（agent 预设没有继承机制），DSH 升级后用 `node packages/experimental/skill-factory/setup/sync-preset.mjs --check`（再 `--write`）重新生成。profile 仍需自己处理的一项只有惰性搜索索引：用 `openAt: first-search` 覆盖 `session-query-sqlite` 行（同时重新写出 `path`），否则预设里的历史会话工具看不到索引。
 
 ### 你会得到什么
 
@@ -82,11 +82,12 @@ skill 与评审文件落在解析出的 project root —— 工作区最近的�
 <details>
 <summary>实现内部——点击展开</summary>
 
-bundle patch 只插入一行，因此 profile 无法半启用该功能。其余全部属于工具入口。
+bundle 层插入 Host 行与预设声明；工具行只存在于该预设内部，因此 profile 无法半启用该功能。
 
 | 文件 | 角色 |
 |---|---|
 | [`cordis.patch.yml`](cordis.patch.yml) | bundle 层：一个挂载 `skill-factory-host` 的 `insert` 条目。 |
+| [`presets/skill-factory.patch.yml`](presets/skill-factory.patch.yml) | agent 预设层：`skill-factory` 预设，由出货 `standard` 组合加上本包的行派生而来。 |
 | [`src/index.ts`](src/index.ts) | Host 入口：再导出服务与公共词汇。 |
 | [`src/host.ts`](src/host.ts) | 服务本体：发现、检查点、聚类、落盘、指标。 |
 | [`src/tool.ts`](src/tool.ts) | 两个模型工具与工作流引擎绑定。 |
