@@ -20,9 +20,10 @@
  * - A row that exists in both compositions takes the shipped `standard` copy,
  *   so upstream config and prompt-text changes (and the removal of obsolete
  *   fields such as `toolFilter`) reach the preset.
- * - A row that exists only in the deployed preset is kept verbatim and in
- *   place: the persistent pwsh shell, the prior-session search tool, and the
- *   Skill Factory delegation rows are local customizations, not upstream state.
+ * - A row that exists only in the deployed preset is kept verbatim only when
+ *   `LOCAL_ONLY` names it: the persistent pwsh shell, the prior-session search
+ *   tool, and the Skill Factory delegation rows. Any other local-only row is
+ *   stale — an upgraded DSH removed it — and is dropped.
  * - A row that exists only upstream is inserted after its shipped predecessor,
  *   unless `EXCLUDED` names it.
  *
@@ -51,6 +52,24 @@ const standardFile = path.join(repoRoot, 'packages/bundle/web-app/presets/standa
 const EXCLUDED = {
   'preset-skill-factory': new Set(['tool-plugin-market', 'tool-pwsh']),
 }
+
+/**
+ * Rows this preset owns that the shipped `standard` composition does not have.
+ * They stay in place verbatim. Any other row that exists only in the deployed
+ * preset is treated as removed upstream and dropped: an upgraded DSH that
+ * deletes a plugin or a subpath entry (for example the
+ * `dsh-tool-subagent-control/list-agents` entry dropped in 0.2.1-rc.3) would
+ * otherwise leave a row that never starts, which marks the whole preset
+ * unusable and hides it from the preset roster.
+ */
+const LOCAL_ONLY = new Set([
+  'persistent-pwsh-shell',
+  'tool-session-query',
+  'tool-subagent-codex',
+  'tool-subagent-claude-code',
+  'skill-factory-tool',
+  'tool-ralph',
+])
 
 /**
  * `!!js` expression nodes: the scalar dialect the profile patch and the shipped
@@ -82,19 +101,20 @@ function targets() {
 }
 
 /**
- * Merge one row list: shared rows take the shipped copy, local-only rows stay
- * put, shipped-only rows land after their shipped predecessor.
+ * Merge one row list: shared rows take the shipped copy, declared local rows
+ * stay put, stale local rows are dropped, shipped-only rows land after their
+ * shipped predecessor.
  * @param deployed - rows currently in the deployed preset.
  * @param shipped - rows of the shipped `standard` preset.
  * @param excluded - shipped row ids this preset does not run.
  * @returns the merged rows, in the deployed order.
  */
 function mergeRows(deployed, shipped, excluded) {
-  const result = deployed.map((row) => {
+  const result = deployed.flatMap((row) => {
     const upstream = shipped.find(candidate => candidate.id === row.id)
-    if (upstream === undefined) return row
+    if (upstream === undefined) return LOCAL_ONLY.has(row.id) ? [row] : []
     const nested = Array.isArray(row.config) && Array.isArray(upstream.config)
-    return nested ? { ...upstream, config: mergeRows(row.config, upstream.config, excluded) } : upstream
+    return [nested ? { ...upstream, config: mergeRows(row.config, upstream.config, excluded) } : upstream]
   })
   for (const [index, upstream] of shipped.entries()) {
     if (excluded.has(upstream.id)) continue
