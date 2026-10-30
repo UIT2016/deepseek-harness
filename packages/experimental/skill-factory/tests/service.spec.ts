@@ -252,6 +252,50 @@ describe('SkillFactoryService.distill', () => {
     expect(runner.requests).toHaveLength(0)
   })
 
+  it('re-reads a checkpointed session once its log advances', async () => {
+    const workspace = await tempWorkspace()
+    const sessions = weeklySessions(workspace)
+    const ctx = await mount(workspace, sessions)
+    const runner = createRunner()
+    await ctx.skillFactory.distill({}, { cwd: workspace, runScript: runner.runScript })
+    runner.requests.length = 0
+
+    // The checkpointed id is resumed: the same log gains one more user request.
+    sessions[0]?.events.push(requestEvent(4, '再按区域拆分一版周报'))
+
+    const second = await ctx.skillFactory.distill({}, { cwd: workspace, runScript: runner.runScript })
+
+    expect(second.sessions).toEqual({ total: 2, skipped: 1, processed: 1, failed: 0 })
+    // Only the advanced session is extracted again.
+    const extraction = runner.requests.filter(request => request.meta.name === 'skill-factory-extract')
+    expect(extraction).toHaveLength(1)
+    const digested = extraction[0]?.args?.sessions as { id?: unknown }[]
+    expect(digested.map(entry => String(entry.id))).toEqual(['s1'])
+  })
+
+  it('processes a session checkpointed while empty once events land', async () => {
+    const workspace = await tempWorkspace()
+    const resumed: StubSession = { header: header('s3', workspace), events: [] }
+    const sessions = [...weeklySessions(workspace), resumed]
+    const ctx = await mount(workspace, sessions)
+    const runner = createRunner()
+
+    const first = await ctx.skillFactory.distill({}, { cwd: workspace, runScript: runner.runScript })
+    expect(first.sessions).toEqual({ total: 3, skipped: 0, processed: 3, failed: 0 })
+
+    // A "new" conversation starts inside an id that was checkpointed empty.
+    resumed.events.push(...session('s3', workspace, '生成周报并导出 xlsx', 'reports/weekly-3.md').events)
+    runner.requests.length = 0
+
+    const second = await ctx.skillFactory.distill({}, { cwd: workspace, runScript: runner.runScript })
+
+    expect(second.sessions).toEqual({ total: 3, skipped: 2, processed: 1, failed: 0 })
+    const extraction = runner.requests.filter(request => request.meta.name === 'skill-factory-extract')
+    expect(extraction).toHaveLength(1)
+    const digested = extraction[0]?.args?.sessions as { id?: unknown }[]
+    expect(digested.map(entry => String(entry.id))).toEqual(['s3'])
+  })
+
   it('re-reads every session in full mode without re-authoring the stored skill', async () => {
     const workspace = await tempWorkspace()
     const sessions = weeklySessions(workspace)

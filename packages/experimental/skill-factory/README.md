@@ -66,7 +66,7 @@ Then install the bundle like any other: the plugin manager adds `@deepseek-ai/ds
 | `skill-factory-host` | Opened by the bundle patch: the `skill_factory` checkpoint domain, the deterministic pipeline, and the `tools/result` listener that counts `skill` and `skill_load` invocations of stored skills. |
 | `./tool` | Mounted by an agent preset: `skill_factory_distill` and `skill_factory_status`. |
 
-Every run is incremental by default. Sessions already in the checkpoint are skipped, stored patterns accumulate across runs, and a cluster becomes a candidate only after `minEvidenceSessions` distinct sessions agree. Under the default `propose` policy an existing skill name is never overwritten: the run writes a review file and leaves the decision to the user.
+Every run is incremental by default. A session is skipped only while its checkpoint already covers every observed event, so a conversation resumed under an already-checkpointed id is read again once it gains events; stored patterns accumulate across runs, and a cluster becomes a candidate only after `minEvidenceSessions` distinct sessions agree. Under the default `propose` policy an existing skill name is never overwritten: the run writes a review file and leaves the decision to the user.
 
 Skills and review files land under the resolved project root — the nearest ancestor of the workspace carrying `.git`, or the workspace itself when no ancestor has one — because that is where the local skill provider discovers project skills. A workspace nested inside a repository therefore writes to the repository's `.dsh` directory, not to the nested directory's own.
 

@@ -13,7 +13,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionQueryEngine, SessionRecord } from '@deepseek-ai/dsh-session-query'
 import type { Domain, DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
@@ -253,16 +253,23 @@ export default class SkillFactoryService extends Service {
       if (mode !== 'revise-only') {
         const records = await this.discover(workspace, request, exec.signal)
         total = records.length
-        const targets = this.selectTargets(records, mode)
-        skipped = targets.skipped
-        log(`skill-factory: ${targets.sessions.length} session(s) to process, ${skipped} already checkpointed`)
 
         const digests: SessionDigest[] = []
-        for (const record of targets.sessions) {
+        for (const record of this.topLevelSessions(records)) {
           exec.signal?.throwIfAborted()
+          const sessionId = record.header.id
           try {
-            const snapshot = await this.sessionQuery.readSession(record.header.id)
-            const title = await this.readTitle(record.header.id)
+            const snapshot = await this.sessionQuery.readSession(sessionId)
+            // Incremental means "nothing new since the checkpoint": a checkpointed
+            // id whose observed log advanced (a resumed conversation that reused the
+            // id) must be re-read, otherwise it stays invisible forever.
+            const prior = this.domain().sessions.get(String(sessionId))
+            if (mode !== 'full' && prior !== undefined && !advancesCheckpoint(prior, snapshot.events)) {
+              skipped += 1
+              continue
+            }
+            if (processed >= this.config.maxSessionsPerRun) break
+            const title = await this.readTitle(sessionId)
             digests.push(await buildSessionDigest(snapshot.session, snapshot.events, {
               cwd: workspace,
               ...title === undefined ? {} : { title },
@@ -275,6 +282,7 @@ export default class SkillFactoryService extends Service {
             errors.push({ sessionId: String(record.header.id), message: messageOf(error) })
           }
         }
+        log(`skill-factory: ${digests.length} session(s) to process, ${skipped} unchanged since their checkpoint`)
 
         const extractions = await this.extract(digests, exec)
         const digestBySession = new Map(digests.map(digest => [String(digest.id), digest]))
@@ -391,20 +399,9 @@ export default class SkillFactoryService extends Service {
     return await this.sessionQuery.filterSessions([{ kind: 'cwd', values: [workspace] }], signal)
   }
 
-  /** Split discovered records into processable targets and checkpointed skips. */
-  private selectTargets(records: readonly SessionRecord[], mode: SkillFactoryMode): { sessions: SessionRecord[]; skipped: number } {
-    const sessions: SessionRecord[] = []
-    let skipped = 0
-    for (const record of records) {
-      if (!isTopLevelSession(record.header)) continue
-      if (mode !== 'full' && this.domain().sessions.get(String(record.header.id)) !== undefined) {
-        skipped += 1
-        continue
-      }
-      sessions.push(record)
-      if (sessions.length >= this.config.maxSessionsPerRun) break
-    }
-    return { sessions, skipped }
+  /** Keep the top-level sessions the factory may learn from, in discovery order. */
+  private topLevelSessions(records: readonly SessionRecord[]): SessionRecord[] {
+    return records.filter(record => isTopLevelSession(record.header))
   }
 
   /** Read one session's folded title, tolerating a title failure. */
@@ -822,4 +819,20 @@ function messageOf(error: unknown): string {
   } catch {
     return '[unrenderable thrown value]'
   }
+}
+
+/**
+ * Whether an observed log has events the checkpoint has not seen yet.
+ *
+ * A session id stays stable while a conversation is resumed, so "already
+ * checkpointed" alone does not mean "nothing new": an id checkpointed while the
+ * log was empty (or shorter) must be processed again once events land.
+ * @param checkpoint - Stored checkpoint for the session id.
+ * @param events - Complete observed log of that id.
+ * @returns whether extraction must run again for this session.
+ */
+function advancesCheckpoint(checkpoint: SessionCheckpointRecord, events: readonly SessionEvent[]): boolean {
+  const observed = events.length === 0 ? null : (events[events.length - 1]?.seq ?? null)
+  if (observed === null) return false
+  return checkpoint.lastSeq === null || observed > checkpoint.lastSeq
 }

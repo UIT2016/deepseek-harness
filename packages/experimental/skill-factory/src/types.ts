@@ -161,9 +161,9 @@ export interface SkillFactoryReport {
   sessions: {
     /** Sessions discovered in the workspace (or named explicitly). */
     total: number
-    /** Sessions skipped by the checkpoint. */
+    /** Sessions skipped because their checkpoint already covers every observed event. */
     skipped: number
-    /** Sessions whose extraction completed. */
+    /** Sessions whose log advanced past the checkpoint and whose extraction completed. */
     processed: number
     /** Sessions whose read or extraction failed. */
     failed: number

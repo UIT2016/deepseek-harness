@@ -30,7 +30,7 @@ const TEXT_OUTPUT = {
 
 const DISTILL_DESCRIPTION = `Distill reusable skills from this workspace's sessions and their delivered files: read what the user asked for in each session, cluster the repeatable task patterns across sessions, and author a SKILL.md per evidence-backed candidate into the workspace skill directory.
 
-Call it on a schedule or on request. It is incremental by default: sessions already checkpointed are skipped, so a repeated call only pays for new work. Existing skills are not overwritten under the default policy — a revised candidate is written to .dsh/skill-factory/reviews/ for the user to accept.
+Call it on a schedule or on request. It is incremental by default: sessions whose checkpoint already covers every observed event are skipped, so a repeated call only pays for new work — a resumed conversation that reused a checkpointed session id is re-read once it gains events. Existing skills are not overwritten under the default policy — a revised candidate is written to .dsh/skill-factory/reviews/ for the user to accept.
 
 Requires a session working directory: that directory is the workspace being distilled.`
 

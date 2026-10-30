@@ -66,7 +66,7 @@ pnpm run build        # emits the lib/ entry a profile loads
 | `skill-factory-host` | 由 bundle patch 打开：`skill_factory` 检查点域、确定性流水线，以及统计已存 skill 的 `skill`／`skill_load` 调用的 `tools/result` 监听。 |
 | `./tool` | 由 agent 预设挂载：`skill_factory_distill` 与 `skill_factory_status`。 |
 
-每次运行默认增量：已进入检查点的会话被跳过，已存模式跨运行累积，且只有 `minEvidenceSessions` 个不同会话一致时聚类才成为候选。默认的 `propose` 策略下已有同名 skill 永不被覆盖：运行写出评审文件，把决定留给用户。
+每次运行默认增量：只有检查点已覆盖该会话全部已观测事件的会话才被跳过（因此在已检查点的 id 上续聊、产生新事件后会重新读取），已存模式跨运行累积，且只有 `minEvidenceSessions` 个不同会话一致时聚类才成为候选。默认的 `propose` 策略下已有同名 skill 永不被覆盖：运行写出评审文件，把决定留给用户。
 
 skill 与评审文件落在解析出的 project root —— 工作区最近的带 `.git` 的祖先目录；若没有任何祖先带 `.git`，就是工作区自身 —— 因为本地 skill provider 正是在那里发现项目级 skill。因此嵌套在仓库内的工作区会写入仓库的 `.dsh` 目录，而不是该嵌套目录自己的。
 
