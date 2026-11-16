@@ -1185,6 +1185,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   SkillFactoryStatus: 'experimental package-local status record is owned by packages/experimental/skill-factory/src/types.ts',
   TerminalScreenPage: 'Browser terminal screen reads are owned by packages/api/terminal-controller/README.md',
   TerminalScreenRequest: 'Browser terminal screen reads are owned by packages/api/terminal-controller/README.md',
+
 }
 
 /** Repository data policy consumed by the Cordis catalog projector. */
